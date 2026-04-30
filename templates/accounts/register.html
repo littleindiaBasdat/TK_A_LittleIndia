@@ -7,10 +7,10 @@
         <form class="stack" method="post">
             {% csrf_token %}
             <label>Role
-                <select name="role" id="role" required>
-                    <option value="customer" {% if role == "customer" %}selected{% endif %}>Customer</option>
-                    <option value="organizer" {% if role == "organizer" %}selected{% endif %}>Organizer</option>
-                    <option value="admin" {% if role == "admin" %}selected{% endif %}>Admin</option>
+                <select name="role" required>
+                    <option value="customer">Customer</option>
+                    <option value="organizer">Organizer</option>
+                    <option value="admin">Admin</option>
                 </select>
             </label>
             <label>Username
@@ -25,50 +25,20 @@
             <label>Konfirmasi Password
                 <input type="password" name="password2" required autocomplete="new-password">
             </label>
-            <div class="role-fields" data-role="customer">
-                <label>Nama Lengkap
-                    <input name="full_name">
-                </label>
-                <label>Nomor Telepon
-                    <input name="phone">
-                </label>
-            </div>
-            <div class="role-fields" data-role="organizer">
-                <label>Nama Organizer
-                    <input name="organizer_name">
-                </label>
-                <label>Email Kontak
-                    <input type="email" name="contact_email">
-                </label>
-                <label>Deskripsi
-                    <textarea name="description"></textarea>
-                </label>
-            </div>
-            <div class="role-fields" data-role="admin">
-                <label>Nama Admin
-                    <input name="full_name">
-                </label>
-            </div>
+            <label>Nama Lengkap
+                <input name="full_name">
+            </label>
+            <label>Nomor Telepon
+                <input name="phone">
+            </label>
+            <label>Nama Organizer
+                <input name="organizer_name">
+            </label>
+            <label>Email Kontak Organizer
+                <input type="email" name="contact_email">
+            </label>
             <button class="primary" type="submit">Daftar</button>
         </form>
-        <p>Sudah punya akun? <a href="{% url 'login' %}">Login</a></p>
     </div>
 </section>
-<script>
-    const role = document.querySelector('#role');
-    const groups = document.querySelectorAll('.role-fields');
-    function syncRoleFields() {
-        groups.forEach(group => {
-            const active = group.dataset.role === role.value;
-            group.style.display = active ? 'grid' : 'none';
-            group.style.gap = '14px';
-            group.querySelectorAll('input, textarea').forEach(input => {
-                input.disabled = !active;
-                input.required = active && input.name !== 'description';
-            });
-        });
-    }
-    role.addEventListener('change', syncRoleFields);
-    syncRoleFields();
-</script>
 {% endblock %}

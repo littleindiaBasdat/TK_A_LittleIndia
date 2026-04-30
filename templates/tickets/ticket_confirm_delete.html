@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Delete Tiket | TikTakTuk{% endblock %}
+{% block content %}
+<section class="panel">
+    <h1>Delete Tiket</h1>
+    <p>Anda yakin ingin menghapus tiket {{ ticket.code }}?</p>
+    <form class="actions" method="post">
+        {% csrf_token %}
+        <button class="danger" type="submit">Hapus</button>
+        <a class="button secondary" href="{% url 'ticket_list' %}">Batal</a>
+    </form>
+</section>
+{% endblock %}

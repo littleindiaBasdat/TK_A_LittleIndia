@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Kursi | TikTakTuk{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>{% if can_manage %}Manajemen Kursi{% else %}Daftar Kursi{% endif %}</h1>
+        <p>Daftar kursi beserta status ketersediaannya.</p>
+    </div>
+    {% if can_manage %}
+        <a class="button primary" href="{% url 'seat_create' %}">Tambah Kursi</a>
+    {% endif %}
+</section>
+<section class="stats">
+    <div class="stat"><span>Total</span><strong>{{ total }}</strong></div>
+    <div class="stat"><span>Tersedia</span><strong>{{ available }}</strong></div>
+    <div class="stat"><span>Terisi</span><strong>{{ filled }}</strong></div>
+</section>
+<form class="filters" method="get">
+    <input name="q" value="{{ query }}" placeholder="Cari venue, section, baris, nomor">
+    <select name="venue">
+        <option value="">Semua Venue</option>
+        {% for venue in venues %}
+            <option value="{{ venue.id }}" {% if venue_filter == venue.id|stringformat:"s" %}selected{% endif %}>{{ venue.name }}</option>
+        {% endfor %}
+    </select>
+    <select name="status">
+        <option value="">Semua Status</option>
+        <option value="available" {% if status_filter == "available" %}selected{% endif %}>Tersedia</option>
+        <option value="filled" {% if status_filter == "filled" %}selected{% endif %}>Terisi</option>
+    </select>
+    <button class="primary" type="submit">Filter</button>
+</form>
+<table>
+    <thead>
+        <tr>
+            <th>Venue</th>
+            <th>Section</th>
+            <th>Baris</th>
+            <th>No. Kursi</th>
+            <th>Status</th>
+            {% if can_manage %}<th>Action</th>{% endif %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for seat in seats %}
+            <tr>
+                <td>{{ seat.venue.name }}</td>
+                <td>{{ seat.section }}</td>
+                <td>{{ seat.row }}</td>
+                <td>{{ seat.number }}</td>
+                <td>
+                    {% if seat.ticket %}
+                        <span class="chip red">Terisi</span>
+                    {% else %}
+                        <span class="chip">Tersedia</span>
+                    {% endif %}
+                </td>
+                {% if can_manage %}
+                    <td>
+                        <div class="actions">
+                            <a class="button secondary" href="{% url 'seat_update' seat.id %}">Update</a>
+                            {% if seat.ticket %}
+                                <span class="button secondary">Delete</span>
+                            {% else %}
+                                <a class="button danger" href="{% url 'seat_delete' seat.id %}">Delete</a>
+                            {% endif %}
+                        </div>
+                    </td>
+                {% endif %}
+            </tr>
+        {% empty %}
+            <tr>
+                <td colspan="{% if can_manage %}6{% else %}5{% endif %}">Belum ada kursi yang sesuai.</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

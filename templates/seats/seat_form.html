@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{% if action == "create" %}Tambah Kursi{% else %}Update Kursi{% endif %} | TikTakTuk{% endblock %}
+{% block content %}
+<section class="panel">
+    <h1>{% if action == "create" %}Tambah Kursi{% else %}Update Kursi{% endif %}</h1>
+    <form class="stack" method="post">
+        {% csrf_token %}
+        <label>Venue
+            <select name="venue" required>
+                <option value="">Pilih venue</option>
+                {% for venue in venues %}
+                    <option value="{{ venue.id }}" {% if seat.venue_id == venue.id %}selected{% endif %}>{{ venue.name }} - {{ venue.city }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Section
+            <input name="section" value="{{ seat.section|default:'' }}" required>
+        </label>
+        <label>Baris
+            <input name="row" value="{{ seat.row|default:'' }}" required>
+        </label>
+        <label>No. Kursi
+            <input name="number" value="{{ seat.number|default:'' }}" required>
+        </label>
+        <div class="actions">
+            <button class="primary" type="submit">{% if action == "create" %}Tambah{% else %}Simpan{% endif %}</button>
+            <a class="button secondary" href="{% url 'seat_list' %}">Batal</a>
+        </div>
+    </form>
+</section>
+{% endblock %}
