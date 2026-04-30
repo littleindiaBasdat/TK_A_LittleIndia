@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Delete Order | TikTakTuk{% endblock %}
+{% block content %}
+<section class="panel">
+    <h1>Delete Order</h1>
+    <p>Anda yakin ingin menghapus order {{ order.id }}?</p>
+    <form class="actions" method="post">
+        {% csrf_token %}
+        <button class="danger" type="submit">Hapus</button>
+        <a class="button secondary" href="{% url 'order_list' %}">Batal</a>
+    </form>
+</section>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Promosi | TikTakTuk{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>Promosi</h1>
+        <p>Daftar promosi aktif dan historis di TikTakTuk.</p>
+    </div>
+    {% if can_admin %}
+        <a class="button primary" href="{% url 'promotion_create' %}">Buat Promo</a>
+    {% endif %}
+</section>
+<section class="stats">
+    <div class="stat"><span>Total Promo</span><strong>{{ total_promos }}</strong></div>
+    <div class="stat"><span>Total Penggunaan</span><strong>{{ total_usage }}</strong></div>
+    <div class="stat"><span>Tipe Persentase</span><strong>{{ percent_count }}</strong></div>
+</section>
+<form class="filters" method="get">
+    <input name="q" value="{{ query }}" placeholder="Cari kode promo">
+    <select name="type">
+        <option value="">Semua Tipe</option>
+        <option value="percent" {% if discount_filter == "percent" %}selected{% endif %}>Persentase</option>
+        <option value="nominal" {% if discount_filter == "nominal" %}selected{% endif %}>Nominal</option>
+    </select>
+    <button class="primary" type="submit">Filter</button>
+</form>
+<table>
+    <thead>
+        <tr>
+            <th>Kode Promo</th>
+            <th>Tipe</th>
+            <th>Nilai</th>
+            <th>Tanggal Mulai</th>
+            <th>Tanggal Berakhir</th>
+            <th>Penggunaan</th>
+            {% if can_admin %}<th>Action</th>{% endif %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for promotion in promotions %}
+            <tr>
+                <td>{{ promotion.promo_code }}</td>
+                <td>{{ promotion.get_discount_type_display }}</td>
+                <td>{% if promotion.discount_type == "percent" %}{{ promotion.discount_value }}%{% else %}Rp{{ promotion.discount_value }}{% endif %}</td>
+                <td>{{ promotion.start_date }}</td>
+                <td>{{ promotion.end_date }}</td>
+                <td>{{ promotion.usage_count }} / {{ promotion.usage_limit }}</td>
+                {% if can_admin %}
+                    <td>
+                        <div class="actions">
+                            <a class="button secondary" href="{% url 'promotion_update' promotion.id %}">Update</a>
+                            <a class="button danger" href="{% url 'promotion_delete' promotion.id %}">Delete</a>
+                        </div>
+                    </td>
+                {% endif %}
+            </tr>
+        {% empty %}
+            <tr>
+                <td colspan="{% if can_admin %}7{% else %}6{% endif %}">Belum ada promosi yang sesuai.</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

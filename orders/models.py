@@ -3,6 +3,7 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 from events.models import Event
+from promotions.models import Promotion
 
 
 class Order(models.Model):
@@ -18,6 +19,7 @@ class Order(models.Model):
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     customer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='orders')
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='orders')
+    promotion = models.ForeignKey(Promotion, on_delete=models.SET_NULL, null=True, blank=True, related_name='orders')
 
     def __str__(self):
         return f'{self.id} - {self.customer}'

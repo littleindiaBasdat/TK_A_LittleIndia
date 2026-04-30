@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{% if action == "update" %}Update Order{% else %}Buat Order{% endif %} | TikTakTuk{% endblock %}
+{% block content %}
+<section class="panel">
+    <h1>{% if action == "update" %}Update Order{% else %}Buat Order{% endif %}</h1>
+    <form class="stack" method="post">
+        {% csrf_token %}
+        {% if action == "update" %}
+            <div class="meta">
+                <span>Order ID: {{ order.id }}</span>
+                <span>Customer: {{ order.customer.display_name }}</span>
+                <span>Event: {{ order.event.title }}</span>
+                <span>Total: Rp{{ order.total_amount }}</span>
+            </div>
+            <label>Status Pembayaran
+                <select name="payment_status" required>
+                    <option value="paid" {% if order.payment_status == "paid" %}selected{% endif %}>Lunas</option>
+                    <option value="pending" {% if order.payment_status == "pending" %}selected{% endif %}>Pending</option>
+                    <option value="cancelled" {% if order.payment_status == "cancelled" %}selected{% endif %}>Dibatalkan</option>
+                </select>
+            </label>
+        {% else %}
+            <label>Kategori Tiket
+                <select name="category" required>
+                    <option value="">Pilih kategori tiket</option>
+                    {% for category in categories %}
+                        <option value="{{ category.id }}">{{ category.event.title }} - {{ category.name }} - Rp{{ category.price }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>Jumlah Tiket
+                <input type="number" name="quantity" min="1" max="10" value="1" required>
+            </label>
+            <label>Kode Promo
+                <input name="promo_code" list="promo-options" placeholder="Opsional">
+            </label>
+            <datalist id="promo-options">
+                {% for promotion in promotions %}
+                    <option value="{{ promotion.promo_code }}">{{ promotion.get_discount_type_display }}</option>
+                {% endfor %}
+            </datalist>
+        {% endif %}
+        <div class="actions">
+            <button class="primary" type="submit">{% if action == "update" %}Update{% else %}Buat Order{% endif %}</button>
+            <a class="button secondary" href="{% url 'order_list' %}">Batal</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

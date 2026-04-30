@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Order | TikTakTuk{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>{% if user.role == "customer" %}Pesanan{% else %}Daftar Order{% endif %}</h1>
+        <p>Daftar order sesuai cakupan role pengguna.</p>
+    </div>
+    {% if can_create %}
+        <a class="button primary" href="{% url 'order_create' %}">Buat Order</a>
+    {% endif %}
+</section>
+<section class="stats">
+    <div class="stat"><span>Total Order</span><strong>{{ total_orders }}</strong></div>
+    <div class="stat"><span>Lunas</span><strong>{{ paid_count }}</strong></div>
+    <div class="stat"><span>Pending</span><strong>{{ pending_count }}</strong></div>
+    <div class="stat"><span>Total Revenue</span><strong>Rp{{ revenue }}</strong></div>
+</section>
+<form class="filters" method="get">
+    <input name="q" value="{{ query }}" placeholder="Cari Order ID, event, atau customer">
+    <select name="status">
+        <option value="">Semua Status</option>
+        <option value="paid" {% if status_filter == "paid" %}selected{% endif %}>Lunas</option>
+        <option value="pending" {% if status_filter == "pending" %}selected{% endif %}>Pending</option>
+        <option value="cancelled" {% if status_filter == "cancelled" %}selected{% endif %}>Dibatalkan</option>
+    </select>
+    <button class="primary" type="submit">Filter</button>
+</form>
+<table>
+    <thead>
+        <tr>
+            <th>Order ID</th>
+            <th>Tanggal</th>
+            <th>Customer</th>
+            <th>Event</th>
+            <th>Status</th>
+            <th>Total</th>
+            {% if can_admin %}<th>Action</th>{% endif %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for order in orders %}
+            <tr>
+                <td>{{ order.id }}</td>
+                <td>{{ order.order_date|date:"d M Y H:i" }}</td>
+                <td>{{ order.customer.display_name }}</td>
+                <td>{{ order.event.title }}</td>
+                <td><span class="chip {% if order.payment_status == 'cancelled' %}red{% elif order.payment_status == 'paid' %}blue{% endif %}">{{ order.get_payment_status_display }}</span></td>
+                <td>Rp{{ order.total_amount }}</td>
+                {% if can_admin %}
+                    <td>
+                        <div class="actions">
+                            <a class="button secondary" href="{% url 'order_update' order.id %}">Update</a>
+                            <a class="button danger" href="{% url 'order_delete' order.id %}">Delete</a>
+                        </div>
+                    </td>
+                {% endif %}
+            </tr>
+        {% empty %}
+            <tr>
+                <td colspan="{% if can_admin %}7{% else %}6{% endif %}">Belum ada order yang sesuai.</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
