@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Kategori Tiket | TikTakTuk{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>Kategori Tiket</h1>
+        <p>Daftar kategori tiket berdasarkan event.</p>
+    </div>
+    {% if can_manage %}
+        <a class="button primary" href="{% url 'ticket_category_create' %}">Tambah Kategori Tiket</a>
+    {% endif %}
+</section>
+<form class="filters" method="get">
+    <input name="q" value="{{ query }}" placeholder="Cari kategori atau event">
+    <select name="event">
+        <option value="">Semua Event</option>
+        {% for event in events %}
+            <option value="{{ event.id }}" {% if event_filter == event.id|stringformat:"s" %}selected{% endif %}>{{ event.title }}</option>
+        {% endfor %}
+    </select>
+    <button class="primary" type="submit">Filter</button>
+</form>
+<table>
+    <thead>
+        <tr>
+            <th>Category ID</th>
+            <th>Category Name</th>
+            <th>Quota</th>
+            <th>Price</th>
+            <th>Event</th>
+            <th>Venue</th>
+            {% if can_manage %}<th>Action</th>{% endif %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for category in categories %}
+            <tr>
+                <td>{{ category.id }}</td>
+                <td>{{ category.name }}</td>
+                <td>{{ category.quota }}</td>
+                <td>Rp{{ category.price }}</td>
+                <td>{{ category.event.title }}</td>
+                <td>{{ category.event.venue.name|default:"-" }}</td>
+                {% if can_manage %}
+                    <td>
+                        <div class="actions">
+                            <a class="button secondary" href="{% url 'ticket_category_update' category.id %}">Update</a>
+                            <a class="button danger" href="{% url 'ticket_category_delete' category.id %}">Delete</a>
+                        </div>
+                    </td>
+                {% endif %}
+            </tr>
+        {% empty %}
+            <tr>
+                <td colspan="{% if can_manage %}7{% else %}6{% endif %}">Belum ada kategori tiket yang sesuai.</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

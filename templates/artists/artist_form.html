@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}{% if action == "create" %}Tambah Artist{% else %}Update Artist{% endif %} | TikTakTuk{% endblock %}
+{% block content %}
+<section class="panel">
+    <h1>{% if action == "create" %}Tambah Artist{% else %}Update Artist{% endif %}</h1>
+    <form class="stack" method="post">
+        {% csrf_token %}
+        <label>Name
+            <input name="name" value="{{ artist.name|default:'' }}" required>
+        </label>
+        <label>Genre
+            <input name="genre" value="{{ artist.genre|default:'' }}">
+        </label>
+        <div class="actions">
+            <button class="primary" type="submit">{% if action == "create" %}Create{% else %}Update{% endif %}</button>
+            <a class="button secondary" href="{% url 'artist_list' %}">Cancel</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

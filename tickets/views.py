@@ -1,8 +1,9 @@
 import uuid
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
+from events.models import Event
 from orders.models import Order
 from seats.models import Seat
 from .models import Ticket, TicketCategory
@@ -111,3 +112,127 @@ def ticket_delete_view(request, pk):
         messages.success(request, 'Tiket berhasil dihapus.')
         return redirect('ticket_list')
     return render(request, 'tickets/ticket_confirm_delete.html', {'ticket': ticket})
+
+
+def category_scope(user):
+    categories = TicketCategory.objects.select_related('event__venue', 'event__organizer').all()
+    if user.is_authenticated and user.role == 'organizer':
+        return categories.filter(event__organizer=user)
+    return categories
+
+
+def event_scope(user):
+    events = Event.objects.select_related('venue', 'organizer').all().order_by('title')
+    if user.is_authenticated and user.role == 'organizer':
+        return events.filter(organizer=user)
+    return events
+
+
+def can_manage_category(user):
+    return user.is_authenticated and user.role in ['admin', 'organizer']
+
+
+def ticket_category_list_view(request):
+    categories = category_scope(request.user)
+    query = request.GET.get('q', '').strip()
+    event_filter = request.GET.get('event', '')
+    if query:
+        categories = categories.filter(Q(name__icontains=query) | Q(event__title__icontains=query))
+    if event_filter:
+        categories = categories.filter(event_id=event_filter)
+    return render(request, 'tickets/category_list.html', {
+        'categories': categories,
+        'events': event_scope(request.user),
+        'query': query,
+        'event_filter': event_filter,
+        'can_manage': can_manage_category(request.user),
+    })
+
+
+@login_required
+def ticket_category_create_view(request):
+    if not can_manage_category(request.user):
+        messages.error(request, 'Anda tidak memiliki izin untuk membuat kategori tiket.')
+        return redirect('ticket_category_list')
+    events = event_scope(request.user)
+    if request.method == 'POST':
+        event_id = request.POST.get('event')
+        name = request.POST.get('name', '').strip()
+        quota_raw = request.POST.get('quota', '')
+        price_raw = request.POST.get('price', '')
+        error = validate_category_input(event_id, name, quota_raw, price_raw, events)
+        if error:
+            messages.error(request, error)
+        else:
+            event = get_object_or_404(events, pk=event_id)
+            quota = int(quota_raw)
+            total_quota = TicketCategory.objects.filter(event=event).aggregate(total=Sum('quota'))['total'] or 0
+            if event.venue and total_quota + quota > event.venue.capacity:
+                messages.error(request, 'Total kuota kategori tiket tidak boleh melebihi kapasitas venue.')
+            else:
+                TicketCategory.objects.create(event=event, name=name, quota=quota, price=price_raw)
+                messages.success(request, 'Kategori tiket berhasil dibuat.')
+                return redirect('ticket_category_list')
+    return render(request, 'tickets/category_form.html', {'events': events, 'action': 'create'})
+
+
+@login_required
+def ticket_category_update_view(request, pk):
+    if not can_manage_category(request.user):
+        messages.error(request, 'Anda tidak memiliki izin untuk mengubah kategori tiket.')
+        return redirect('ticket_category_list')
+    category = get_object_or_404(category_scope(request.user), pk=pk)
+    events = event_scope(request.user)
+    if request.method == 'POST':
+        event_id = request.POST.get('event')
+        name = request.POST.get('name', '').strip()
+        quota_raw = request.POST.get('quota', '')
+        price_raw = request.POST.get('price', '')
+        error = validate_category_input(event_id, name, quota_raw, price_raw, events)
+        if error:
+            messages.error(request, error)
+        else:
+            event = get_object_or_404(events, pk=event_id)
+            quota = int(quota_raw)
+            total_quota = TicketCategory.objects.filter(event=event).exclude(pk=category.pk).aggregate(total=Sum('quota'))['total'] or 0
+            if event.venue and total_quota + quota > event.venue.capacity:
+                messages.error(request, 'Total kuota kategori tiket tidak boleh melebihi kapasitas venue.')
+            else:
+                category.event = event
+                category.name = name
+                category.quota = quota
+                category.price = price_raw
+                category.save()
+                messages.success(request, 'Kategori tiket berhasil diperbarui.')
+                return redirect('ticket_category_list')
+    return render(request, 'tickets/category_form.html', {'events': events, 'category': category, 'action': 'update'})
+
+
+@login_required
+def ticket_category_delete_view(request, pk):
+    if not can_manage_category(request.user):
+        messages.error(request, 'Anda tidak memiliki izin untuk menghapus kategori tiket.')
+        return redirect('ticket_category_list')
+    category = get_object_or_404(category_scope(request.user), pk=pk)
+    if request.method == 'POST':
+        category.delete()
+        messages.success(request, 'Kategori tiket berhasil dihapus.')
+        return redirect('ticket_category_list')
+    return render(request, 'tickets/category_confirm_delete.html', {'category': category})
+
+
+def validate_category_input(event_id, name, quota_raw, price_raw, events):
+    if not all([event_id, name, quota_raw, price_raw]):
+        return 'Semua field wajib diisi.'
+    if not events.filter(pk=event_id).exists():
+        return 'Event tidak valid untuk role Anda.'
+    try:
+        quota = int(quota_raw)
+        price = float(price_raw)
+    except ValueError:
+        return 'Quota dan price harus berupa angka.'
+    if quota <= 0:
+        return 'Quota harus berupa bilangan positif.'
+    if price < 0:
+        return 'Price tidak boleh negatif.'
+    return None
