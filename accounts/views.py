@@ -47,11 +47,24 @@ def register_view(request):
         elif UserAccount.objects.filter(email=email).exists():
             messages.error(request, 'Email sudah terdaftar.')
         else:
+            full_name = request.POST.get('full_name', '').strip()
+            phone = request.POST.get('phone', '').strip()
+            organizer_name = request.POST.get('organizer_name', '').strip()
+            contact_email = request.POST.get('contact_email', '').strip()
+            if role == 'customer' and not all([full_name, phone]):
+                messages.error(request, 'Nama lengkap dan nomor telepon wajib diisi.')
+                return render(request, 'accounts/register.html')
+            if role == 'organizer' and not all([organizer_name, contact_email]):
+                messages.error(request, 'Nama organizer dan email kontak wajib diisi.')
+                return render(request, 'accounts/register.html')
+            if role == 'admin' and not full_name:
+                messages.error(request, 'Nama admin wajib diisi.')
+                return render(request, 'accounts/register.html')
             user = UserAccount(username=username, email=email, role=role)
-            user.full_name = request.POST.get('full_name', '').strip()
-            user.phone = request.POST.get('phone', '').strip()
-            user.organizer_name = request.POST.get('organizer_name', '').strip()
-            user.contact_email = request.POST.get('contact_email', '').strip()
+            user.full_name = full_name
+            user.phone = phone
+            user.organizer_name = organizer_name
+            user.contact_email = contact_email
             user.is_staff = role == 'admin'
             user.set_password(password)
             user.save()
