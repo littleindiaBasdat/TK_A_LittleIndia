@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} | TikTakTuk{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>{{ title }}</h1>
+        <p>Daftar tiket sesuai hak akses pengguna.</p>
+    </div>
+    {% if can_create %}
+        <a class="button primary" href="{% url 'ticket_create' %}">Tambah Tiket</a>
+    {% endif %}
+</section>
+<form class="filters" method="get">
+    <input name="q" value="{{ query }}" placeholder="Cari kode tiket atau event">
+    <select name="status">
+        <option value="">Semua Status</option>
+        <option value="active" {% if status_filter == "active" %}selected{% endif %}>Aktif</option>
+        <option value="used" {% if status_filter == "used" %}selected{% endif %}>Digunakan</option>
+        <option value="cancelled" {% if status_filter == "cancelled" %}selected{% endif %}>Dibatalkan</option>
+    </select>
+    <button class="primary" type="submit">Filter</button>
+</form>
+<section class="grid">
+    {% for ticket in tickets %}
+        <article class="card">
+            <span class="chip">{{ ticket.get_status_display }}</span>
+            <div>
+                <h2>{{ ticket.code }}</h2>
+                <div class="meta">
+                    <span>Event: {{ ticket.order.event.title }}</span>
+                    <span>Kategori: {{ ticket.category.name }} - Rp{{ ticket.category.price }}</span>
+                    <span>Pelanggan: {{ ticket.order.customer.display_name }}</span>
+                    <span>Venue: {{ ticket.order.event.venue.name }}</span>
+                    <span>Kursi: {% if ticket.seat %}{{ ticket.seat.label }}{% else %}Tanpa Kursi{% endif %}</span>
+                </div>
+            </div>
+            {% if can_admin %}
+                <div class="actions">
+                    <a class="button secondary" href="{% url 'ticket_update' ticket.id %}">Update</a>
+                    <a class="button danger" href="{% url 'ticket_delete' ticket.id %}">Delete</a>
+                </div>
+            {% endif %}
+        </article>
+    {% empty %}
+        <div class="panel">Belum ada tiket yang sesuai.</div>
+    {% endfor %}
+</section>
+{% endblock %}

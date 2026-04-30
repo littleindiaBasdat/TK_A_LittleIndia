@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{% if action == "create" %}Tambah Tiket{% else %}Update Tiket{% endif %} | TikTakTuk{% endblock %}
+{% block content %}
+<section class="panel">
+    <h1>{% if action == "create" %}Tambah Tiket{% else %}Update Tiket{% endif %}</h1>
+    <form class="stack" method="post">
+        {% csrf_token %}
+        {% if action == "create" %}
+            <label>Order
+                <select name="order" required>
+                    <option value="">Pilih order</option>
+                    {% for order in orders %}
+                        <option value="{{ order.id }}">{{ order.id }} - {{ order.customer.display_name }} - {{ order.event.title }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>Kategori Tiket
+                <select name="category" required>
+                    <option value="">Pilih kategori</option>
+                    {% for category in categories %}
+                        <option value="{{ category.id }}">{{ category.event.title }} - {{ category.name }} - Rp{{ category.price }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>Kursi
+                <select name="seat">
+                    <option value="">Tanpa Kursi</option>
+                    {% for seat in seats %}
+                        <option value="{{ seat.id }}">{{ seat.venue.name }} - {{ seat.label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+        {% else %}
+            <div class="meta">
+                <span>Kode Tiket: {{ ticket.code }}</span>
+                <span>Event: {{ ticket.order.event.title }}</span>
+                <span>Kategori: {{ ticket.category.name }}</span>
+            </div>
+            <label>Status
+                <select name="status" required>
+                    <option value="active" {% if ticket.status == "active" %}selected{% endif %}>Aktif</option>
+                    <option value="used" {% if ticket.status == "used" %}selected{% endif %}>Digunakan</option>
+                    <option value="cancelled" {% if ticket.status == "cancelled" %}selected{% endif %}>Dibatalkan</option>
+                </select>
+            </label>
+            <label>Kursi
+                <select name="seat">
+                    <option value="">Tanpa Kursi</option>
+                    {% for seat in seats %}
+                        <option value="{{ seat.id }}" {% if ticket.seat_id == seat.id %}selected{% endif %}>{{ seat.venue.name }} - {{ seat.label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+        {% endif %}
+        <div class="actions">
+            <button class="primary" type="submit">{% if action == "create" %}Buat Tiket{% else %}Simpan{% endif %}</button>
+            <a class="button secondary" href="{% url 'ticket_list' %}">Batal</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

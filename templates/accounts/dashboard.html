@@ -4,27 +4,35 @@
 <section class="page-head">
     <div>
         <h1>Dashboard</h1>
-        <p>Profil pengguna yang sedang login.</p>
+        <p>Profil dan ringkasan aktivitas pengguna.</p>
     </div>
     <div class="actions">
         <a class="button secondary" href="{% url 'profile_edit' %}">Edit Profil</a>
         <a class="button secondary" href="{% url 'password_update' %}">Update Password</a>
-        <a class="button danger" href="{% url 'logout' %}">Logout</a>
     </div>
 </section>
+<section class="stats">
+    <div class="stat"><span>Tiket</span><strong>{{ tickets_count }}</strong></div>
+    <div class="stat"><span>Order</span><strong>{{ orders_count }}</strong></div>
+    <div class="stat"><span>Event</span><strong>{{ events_count }}</strong></div>
+    <div class="stat"><span>Kursi</span><strong>{{ seats_count }}</strong></div>
+</section>
 <section class="panel">
-    <div class="profile-grid">
-        <div class="kv"><span>Username</span>{{ user.username }}</div>
-        <div class="kv"><span>Email</span>{{ user.email }}</div>
-        <div class="kv"><span>Role</span>{{ user.get_role_display }}</div>
-        <div class="kv"><span>Nama</span>{{ user.full_name|default:"-" }}</div>
-        {% if user.role == "customer" %}
-            <div class="kv"><span>Nomor Telepon</span>{{ user.phone|default:"-" }}</div>
-        {% elif user.role == "organizer" and organizer_profile %}
-            <div class="kv"><span>Nama Organizer</span>{{ organizer_profile.organizer_name }}</div>
-            <div class="kv"><span>Email Kontak</span>{{ organizer_profile.contact_email }}</div>
-            <div class="kv"><span>Deskripsi</span>{{ organizer_profile.description|default:"-" }}</div>
-        {% endif %}
+    <div class="grid">
+        <div>
+            <h2>Informasi Akun</h2>
+            <div class="meta">
+                <span>Username: {{ user.username }}</span>
+                <span>Email: {{ user.email }}</span>
+                <span>Role: {{ user.get_role_display }}</span>
+                <span>Nama: {{ user.display_name }}</span>
+                {% if user.role == "customer" %}
+                    <span>Nomor Telepon: {{ user.phone|default:"-" }}</span>
+                {% elif user.role == "organizer" %}
+                    <span>Email Kontak: {{ user.contact_email|default:"-" }}</span>
+                {% endif %}
+            </div>
+        </div>
     </div>
 </section>
 {% endblock %}

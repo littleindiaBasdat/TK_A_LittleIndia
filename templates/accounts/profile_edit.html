@@ -5,23 +5,23 @@
     <h1>Edit Profil</h1>
     <form class="stack" method="post">
         {% csrf_token %}
-        {% if user.role == "customer" %}
-            <label>Nama Lengkap
-                <input name="full_name" value="{{ user.full_name|default:'' }}" required>
-            </label>
-            <label>Nomor Telepon
-                <input name="phone" value="{{ user.phone|default:'' }}" required>
-            </label>
-        {% elif user.role == "organizer" %}
+        {% if user.role == "organizer" %}
             <label>Nama Organizer
-                <input name="organizer_name" value="{{ organizer_profile.organizer_name|default:'' }}" required>
+                <input name="organizer_name" value="{{ user.organizer_name }}" required>
             </label>
             <label>Email Kontak
-                <input type="email" name="contact_email" value="{{ organizer_profile.contact_email|default:'' }}" required>
+                <input type="email" name="contact_email" value="{{ user.contact_email }}" required>
+            </label>
+        {% elif user.role == "customer" %}
+            <label>Nama Lengkap
+                <input name="full_name" value="{{ user.full_name }}" required>
+            </label>
+            <label>Nomor Telepon
+                <input name="phone" value="{{ user.phone }}" required>
             </label>
         {% else %}
             <label>Nama Admin
-                <input name="full_name" value="{{ user.full_name|default:'' }}" required>
+                <input name="full_name" value="{{ user.full_name }}" required>
             </label>
             <label>Email
                 <input type="email" name="email" value="{{ user.email }}" required>

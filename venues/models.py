@@ -7,6 +7,7 @@ class Venue(models.Model):
         ('reserved', 'Reserved Seating'),
         ('free', 'Free Seating'),
     ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255)
     address = models.TextField()
@@ -15,4 +16,4 @@ class Venue(models.Model):
     seating_type = models.CharField(max_length=20, choices=SEATING_CHOICES, default='free')
 
     def __str__(self):
-        return f"{self.name} - {self.city}"
+        return f'{self.name} - {self.city}'
