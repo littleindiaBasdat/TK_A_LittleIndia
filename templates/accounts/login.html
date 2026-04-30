@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Login | TikTakTuk{% endblock %}
+{% block content %}
+<section class="auth-shell">
+    <div class="panel auth-card">
+        <h1>Login</h1>
+        <p>Masuk menggunakan email dan password akun TikTakTuk.</p>
+        <form class="stack" method="post">
+            {% csrf_token %}
+            <label>Email
+                <input type="email" name="email" required autocomplete="email">
+            </label>
+            <label>Password
+                <input type="password" name="password" required autocomplete="current-password">
+            </label>
+            <button class="primary" type="submit">Masuk</button>
+        </form>
+        <p>Belum punya akun? <a href="{% url 'register' %}">Registrasi</a></p>
+    </div>
+</section>
+{% endblock %}

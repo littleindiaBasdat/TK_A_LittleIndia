@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Edit Profil | TikTakTuk{% endblock %}
+{% block content %}
+<section class="panel">
+    <h1>Edit Profil</h1>
+    <form class="stack" method="post">
+        {% csrf_token %}
+        {% if user.role == "customer" %}
+            <label>Nama Lengkap
+                <input name="full_name" value="{{ user.full_name|default:'' }}" required>
+            </label>
+            <label>Nomor Telepon
+                <input name="phone" value="{{ user.phone|default:'' }}" required>
+            </label>
+        {% elif user.role == "organizer" %}
+            <label>Nama Organizer
+                <input name="organizer_name" value="{{ organizer_profile.organizer_name|default:'' }}" required>
+            </label>
+            <label>Email Kontak
+                <input type="email" name="contact_email" value="{{ organizer_profile.contact_email|default:'' }}" required>
+            </label>
+        {% else %}
+            <label>Nama Admin
+                <input name="full_name" value="{{ user.full_name|default:'' }}" required>
+            </label>
+            <label>Email
+                <input type="email" name="email" value="{{ user.email }}" required>
+            </label>
+        {% endif %}
+        <div class="actions">
+            <button class="primary" type="submit">Simpan</button>
+            <a class="button secondary" href="{% url 'dashboard' %}">Batal</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

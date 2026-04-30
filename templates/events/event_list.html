@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Cari Event | TikTakTuk{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>Cari Event</h1>
+        <p>Jelajahi acara berdasarkan judul, artis, dan venue.</p>
+    </div>
+    {% if user.is_authenticated and user.role == "admin" or user.role == "organizer" %}
+        <a class="button primary" href="{% url 'event_create' %}">Buat Acara</a>
+    {% endif %}
+</section>
+<form class="filters" method="get">
+    <input name="q" placeholder="Cari judul atau artis" value="{{ query }}">
+    <select name="venue">
+        <option value="">Semua Venue</option>
+        {% for venue in venues %}
+            <option value="{{ venue.id }}" {% if venue_filter == venue.id|stringformat:"s" %}selected{% endif %}>{{ venue.name }}</option>
+        {% endfor %}
+    </select>
+    <select name="artist">
+        <option value="">Semua Artis</option>
+        {% for artist in artists %}
+            <option value="{{ artist.id }}" {% if artist_filter == artist.id|stringformat:"s" %}selected{% endif %}>{{ artist.name }}</option>
+        {% endfor %}
+    </select>
+    <button class="primary" type="submit">Filter</button>
+</form>
+<section class="grid">
+    {% for event in events %}
+        <article class="card">
+            <span class="chip">{{ event.date }} · {{ event.time }}</span>
+            <div>
+                <h2>{{ event.title }}</h2>
+                <div class="meta">
+                    <span>{{ event.venue.name|default:"Venue belum dipilih" }}</span>
+                    <span>
+                        {% for artist in event.artists.all %}
+                            {{ artist.name }}{% if not forloop.last %}, {% endif %}
+                        {% empty %}
+                            Artis belum ditentukan
+                        {% endfor %}
+                    </span>
+                    <span>Kategori tiket dan harga mulai belum tersedia</span>
+                </div>
+            </div>
+            {% if event.description %}
+                <p>{{ event.description }}</p>
+            {% endif %}
+            {% if user.is_authenticated and user.role == "admin" or user == event.organizer %}
+                <div class="actions">
+                    <a class="button secondary" href="{% url 'event_update' event.id %}">Edit Acara</a>
+                </div>
+            {% endif %}
+        </article>
+    {% empty %}
+        <div class="panel">Belum ada event yang sesuai.</div>
+    {% endfor %}
+</section>
+{% endblock %}

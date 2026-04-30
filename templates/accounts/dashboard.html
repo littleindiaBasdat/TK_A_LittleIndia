@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Dashboard | TikTakTuk{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>Dashboard</h1>
+        <p>Profil pengguna yang sedang login.</p>
+    </div>
+    <div class="actions">
+        <a class="button secondary" href="{% url 'profile_edit' %}">Edit Profil</a>
+        <a class="button secondary" href="{% url 'password_update' %}">Update Password</a>
+        <a class="button danger" href="{% url 'logout' %}">Logout</a>
+    </div>
+</section>
+<section class="panel">
+    <div class="profile-grid">
+        <div class="kv"><span>Username</span>{{ user.username }}</div>
+        <div class="kv"><span>Email</span>{{ user.email }}</div>
+        <div class="kv"><span>Role</span>{{ user.get_role_display }}</div>
+        <div class="kv"><span>Nama</span>{{ user.full_name|default:"-" }}</div>
+        {% if user.role == "customer" %}
+            <div class="kv"><span>Nomor Telepon</span>{{ user.phone|default:"-" }}</div>
+        {% elif user.role == "organizer" and organizer_profile %}
+            <div class="kv"><span>Nama Organizer</span>{{ organizer_profile.organizer_name }}</div>
+            <div class="kv"><span>Email Kontak</span>{{ organizer_profile.contact_email }}</div>
+            <div class="kv"><span>Deskripsi</span>{{ organizer_profile.description|default:"-" }}</div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

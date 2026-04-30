@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Venue | TikTakTuk{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>Venue</h1>
+        <p>Daftar lokasi acara yang tersedia di TikTakTuk.</p>
+    </div>
+    {% if user.is_authenticated and user.role == "admin" or user.role == "organizer" %}
+        <a class="button primary" href="{% url 'venue_create' %}">Tambah Venue</a>
+    {% endif %}
+</section>
+<form class="filters" method="get">
+    <input name="q" placeholder="Cari nama atau alamat venue" value="{{ query }}">
+    <select name="city">
+        <option value="">Semua Kota</option>
+        {% for city in cities %}
+            <option value="{{ city }}" {% if city_filter == city %}selected{% endif %}>{{ city }}</option>
+        {% endfor %}
+    </select>
+    <select name="seating">
+        <option value="">Semua Seating</option>
+        <option value="reserved" {% if seating_filter == "reserved" %}selected{% endif %}>Reserved Seating</option>
+        <option value="free" {% if seating_filter == "free" %}selected{% endif %}>Free Seating</option>
+    </select>
+    <button class="primary" type="submit">Filter</button>
+</form>
+<section class="grid">
+    {% for venue in venues %}
+        <article class="card">
+            <span class="chip">{{ venue.get_seating_type_display }}</span>
+            <div>
+                <h2>{{ venue.name }}</h2>
+                <div class="meta">
+                    <span>{{ venue.address }}</span>
+                    <span>{{ venue.city }}</span>
+                    <span>Kapasitas {{ venue.capacity }}</span>
+                </div>
+            </div>
+            {% if user.is_authenticated and user.role == "admin" or user.role == "organizer" %}
+                <div class="actions">
+                    <a class="button secondary" href="{% url 'venue_update' venue.id %}">Edit</a>
+                    <a class="button danger" href="{% url 'venue_delete' venue.id %}">Hapus</a>
+                </div>
+            {% endif %}
+        </article>
+    {% empty %}
+        <div class="panel">Belum ada venue yang sesuai.</div>
+    {% endfor %}
+</section>
+{% endblock %}
