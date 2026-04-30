@@ -16,6 +16,7 @@ INSTALLED_APPS = [
     'accounts',
     'venues',
     'events',
+    'artists',
     'orders',
     'tickets',
     'seats',

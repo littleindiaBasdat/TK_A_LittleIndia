@@ -6,6 +6,7 @@ urlpatterns = [
     path('', lambda request: redirect('dashboard' if request.user.is_authenticated else 'login')),
     path('admin/', admin.site.urls),
     path('', include('accounts.urls')),
+    path('artists/', include('artists.urls')),
     path('orders/', include('orders.urls')),
     path('promotions/', include('promotions.urls')),
     path('tickets/', include('tickets.urls')),

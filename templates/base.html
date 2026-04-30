@@ -142,12 +142,16 @@
                 {% if user.role == 'admin' %}
                     <a href="{% url 'order_list' %}">Semua Order</a>
                     <a href="{% url 'promotion_list' %}">Promosi</a>
+                    <a href="{% url 'artist_list' %}">Artis</a>
+                    <a href="{% url 'ticket_category_list' %}">Kategori Tiket</a>
                     <a href="{% url 'ticket_list' %}">Manajemen Tiket</a>
                     <a href="{% url 'seat_list' %}">Manajemen Kursi</a>
                     <a href="{% url 'dashboard' %}">Profile</a>
                 {% elif user.role == 'organizer' %}
                     <a href="{% url 'order_list' %}">Semua Order</a>
                     <a href="{% url 'promotion_list' %}">Promosi</a>
+                    <a href="{% url 'artist_list' %}">Artis</a>
+                    <a href="{% url 'ticket_category_list' %}">Kategori Tiket</a>
                     <a href="{% url 'ticket_list' %}">Manajemen Tiket</a>
                     <a href="{% url 'seat_list' %}">Manajemen Kursi</a>
                     <a href="{% url 'dashboard' %}">Profile</a>
@@ -155,6 +159,8 @@
                     <a href="{% url 'ticket_list' %}">Tiket Saya</a>
                     <a href="{% url 'order_list' %}">Pesanan</a>
                     <a href="{% url 'promotion_list' %}">Promosi</a>
+                    <a href="{% url 'artist_list' %}">Artis</a>
+                    <a href="{% url 'ticket_category_list' %}">Kategori Tiket</a>
                     <a href="{% url 'seat_list' %}">Kursi</a>
                     <a href="{% url 'dashboard' %}">Profile</a>
                 {% endif %}
@@ -163,6 +169,8 @@
                 <a href="{% url 'login' %}">Login</a>
                 <a href="{% url 'register' %}">Registrasi</a>
                 <a href="{% url 'promotion_list' %}">Promosi</a>
+                <a href="{% url 'artist_list' %}">Artis</a>
+                <a href="{% url 'ticket_category_list' %}">Kategori Tiket</a>
             {% endif %}
         </nav>
     </header>

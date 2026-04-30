@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Delete Artist | TikTakTuk{% endblock %}
+{% block content %}
+<section class="panel">
+    <h1>Delete Artist</h1>
+    <p>Artist ID: {{ artist.id }}</p>
+    <p>Name: {{ artist.name }}</p>
+    <form class="actions" method="post">
+        {% csrf_token %}
+        <button class="danger" type="submit">Confirm Deletion</button>
+        <a class="button secondary" href="{% url 'artist_list' %}">Cancel</a>
+    </form>
+</section>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Artis | TikTakTuk{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>Artis</h1>
+        <p>Daftar artist dan performer yang tersedia di TikTakTuk.</p>
+    </div>
+    {% if can_admin %}
+        <a class="button primary" href="{% url 'artist_create' %}">Tambah Artist</a>
+    {% endif %}
+</section>
+<form class="filters" method="get">
+    <input name="q" value="{{ query }}" placeholder="Cari nama artist">
+    <select name="genre">
+        <option value="">Semua Genre</option>
+        {% for genre in genres %}
+            <option value="{{ genre }}" {% if genre_filter == genre %}selected{% endif %}>{{ genre }}</option>
+        {% endfor %}
+    </select>
+    <button class="primary" type="submit">Filter</button>
+</form>
+<table>
+    <thead>
+        <tr>
+            <th>Artist ID</th>
+            <th>Name</th>
+            <th>Genre</th>
+            {% if can_admin %}<th>Action</th>{% endif %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for artist in artists %}
+            <tr>
+                <td>{{ artist.id }}</td>
+                <td>{{ artist.name }}</td>
+                <td>{{ artist.genre|default:"-" }}</td>
+                {% if can_admin %}
+                    <td>
+                        <div class="actions">
+                            <a class="button secondary" href="{% url 'artist_update' artist.id %}">Update</a>
+                            <a class="button danger" href="{% url 'artist_delete' artist.id %}">Delete</a>
+                        </div>
+                    </td>
+                {% endif %}
+            </tr>
+        {% empty %}
+            <tr>
+                <td colspan="{% if can_admin %}4{% else %}3{% endif %}">Belum ada artist yang sesuai.</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

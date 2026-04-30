@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{% if action == "create" %}Tambah Kategori Tiket{% else %}Update Kategori Tiket{% endif %} | TikTakTuk{% endblock %}
+{% block content %}
+<section class="panel">
+    <h1>{% if action == "create" %}Tambah Kategori Tiket{% else %}Update Kategori Tiket{% endif %}</h1>
+    <form class="stack" method="post">
+        {% csrf_token %}
+        <label>Event
+            <select name="event" required>
+                <option value="">Pilih event</option>
+                {% for event in events %}
+                    <option value="{{ event.id }}" {% if category.event_id == event.id %}selected{% endif %}>{{ event.title }} - {{ event.venue.name|default:"Venue belum dipilih" }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Category Name
+            <input name="name" value="{{ category.name|default:'' }}" required>
+        </label>
+        <label>Quota
+            <input type="number" min="1" name="quota" value="{{ category.quota|default:'' }}" required>
+        </label>
+        <label>Price
+            <input type="number" min="0" step="0.01" name="price" value="{{ category.price|default:'' }}" required>
+        </label>
+        <div class="actions">
+            <button class="primary" type="submit">{% if action == "create" %}Create{% else %}Update{% endif %}</button>
+            <a class="button secondary" href="{% url 'ticket_category_list' %}">Cancel</a>
+        </div>
+    </form>
+</section>
+{% endblock %}
