@@ -51,9 +51,6 @@
                 <td>{{ seat.row_number }}</td>
                 <td>{{ seat.seat_number }}</td>
                 <td>
-                    {# FIX: status ditentukan dari views — tambahkan key 'is_filled' di views,
-                       atau pakai logika di sini via has_relationship check.
-                       Untuk sekarang kita tambahkan is_filled dari views.py (lihat catatan di bawah) #}
                     {% if seat.is_filled %}
                         <span class="chip red">Terisi</span>
                     {% else %}

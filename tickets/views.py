@@ -134,13 +134,17 @@ def ticket_create_view(request):
         messages.error(request, 'Anda tidak memiliki izin untuk membuat tiket.')
         return redirect('ticket_list')
 
-    # FIX: ORDER tidak punya event_id — event didapat lewat ticket_category
+    # Get orders with event info via ticket_category
     orders_sql = """
-        SELECT o.order_id, o.order_date, o.payment_status, o.total_amount,
-               c.full_name AS customer_name
+        SELECT DISTINCT o.order_id, o.order_date, o.payment_status, o.total_amount,
+               c.full_name AS customer_name,
+               e.event_id, e.event_title
         FROM "ORDER" o
         LEFT JOIN customer c ON o.customer_id = c.customer_id
-        WHERE 1=1
+        LEFT JOIN ticket t ON o.order_id = t.order_id
+        LEFT JOIN ticket_category tc ON t.category_id = tc.category_id
+        LEFT JOIN event e ON tc.event_id = e.event_id
+        ORDER BY o.order_date DESC
     """
     orders_params = []
 
@@ -149,13 +153,15 @@ def ticket_create_view(request):
         cols = [col[0] for col in cursor.description]
         orders = [dict(zip(cols, row)) for row in cursor.fetchall()]
 
-    # FIX: kolom category_name (bukan name), join event & venue untuk display
+    # Get categories with quota usage info
     categories_sql = """
         SELECT tc.category_id, tc.category_name, tc.quota, tc.price,
-               tc.event_id, e.event_title, v.venue_name
+               tc.event_id, e.event_title, v.venue_name, v.venue_id,
+               COUNT(t.ticket_id) AS tickets_sold
         FROM ticket_category tc
         LEFT JOIN event e ON tc.event_id = e.event_id
         LEFT JOIN venue v ON e.venue_id = v.venue_id
+        LEFT JOIN ticket t ON tc.category_id = t.category_id
         WHERE 1=1
     """
     categories_params = []
@@ -163,18 +169,21 @@ def ticket_create_view(request):
     if request.user.role == 'organizer':
         categories_sql += " AND e.organizer_id = %s"
         categories_params.append(str(request.user.id))
+    
+    categories_sql += " GROUP BY tc.category_id, tc.category_name, tc.quota, tc.price, tc.event_id, e.event_title, v.venue_name, v.venue_id"
 
     with connection.cursor() as cursor:
         cursor.execute(categories_sql, categories_params)
         cols = [col[0] for col in cursor.description]
         categories = [dict(zip(cols, row)) for row in cursor.fetchall()]
 
-    # FIX: available seats lewat has_relationship (bukan ticket.seat_id)
+    # Get available seats (not assigned to any ticket)
     seats_sql = """
         SELECT s.*, v.venue_name AS venue_name
         FROM seat s
         LEFT JOIN venue v ON s.venue_id = v.venue_id
         WHERE s.seat_id NOT IN (SELECT DISTINCT seat_id FROM has_relationship)
+        ORDER BY v.venue_name, s.section, s.row_number, s.seat_number
     """
 
     with connection.cursor() as cursor:

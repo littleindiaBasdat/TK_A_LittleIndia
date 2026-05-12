@@ -23,7 +23,6 @@
             <h2>Informasi Akun</h2>
             <div class="meta">
                 <span>Username: {{ user.username }}</span>
-                <span>Email: {{ user.email }}</span>
                 <span>Role: {{ user.get_role_display }}</span>
                 <span>Nama: {{ user.display_name }}</span>
                 {% if user.role == "customer" %}

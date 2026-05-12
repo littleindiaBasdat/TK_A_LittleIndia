@@ -14,22 +14,17 @@ def get_user_from_session(request):
     
     # Cek apakah session ada
     if not hasattr(request, 'session') or not request.session:
-        print(f"[DEBUG] Tidak ada session untuk request ke {request.path}")
         return AnonymousUser()  # Return anonymous user, bukan None
     
     # Ambil user_id dari session
     user_id = request.session.get(SESSION_KEY)
-    print(f"[DEBUG] Session keys: {list(request.session.keys())}, user_id: {user_id}")
     
     if not user_id:
-        print(f"[DEBUG] user_id tidak ada di session untuk request ke {request.path}")
         return AnonymousUser()  # Return anonymous user, bukan None
     
     # Gunakan custom RawSQLBackend untuk load user (tanpa django.contrib.auth)
     backend = RawSQLBackend()
     user = backend.get_user(user_id)
-    
-    print(f"[DEBUG] Loaded user dari backend: {user}")
     
     if user:
         # Tandai backend yang digunakan
@@ -37,7 +32,6 @@ def get_user_from_session(request):
         return user
     
     # Jika user tidak ditemukan, return anonymous user
-    print(f"[DEBUG] User tidak ditemukan untuk user_id {user_id}")
     return AnonymousUser()
 
 

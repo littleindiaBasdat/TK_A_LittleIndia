@@ -41,17 +41,17 @@
     <tbody>
         {% for order in orders %}
             <tr>
-                <td>{{ order.id }}</td>
+                <td>{{ order.order_id }}</td>
                 <td>{{ order.order_date|date:"d M Y H:i" }}</td>
-                <td>{{ order.customer.display_name }}</td>
-                <td>{{ order.event.title }}</td>
-                <td><span class="chip {% if order.payment_status == 'cancelled' %}red{% elif order.payment_status == 'paid' %}blue{% endif %}">{{ order.get_payment_status_display }}</span></td>
+                <td>{{ order.customer_name }}</td>
+                <td>{{ order.event_name }}</td>
+                <td><span class="chip {% if order.payment_status == 'Dibatalkan' %}red{% elif order.payment_status == 'Lunas' %}blue{% endif %}">{{ order.payment_status }}</span></td>
                 <td>Rp{{ order.total_amount }}</td>
                 {% if can_admin %}
                     <td>
                         <div class="actions">
-                            <a class="button secondary" href="{% url 'order_update' order.id %}">Update</a>
-                            <a class="button danger" href="{% url 'order_delete' order.id %}">Delete</a>
+                            <a class="button secondary" href="{% url 'order_update' order.order_id %}">Update</a>
+                            <a class="button danger" href="{% url 'order_delete' order.order_id %}">Delete</a>
                         </div>
                     </td>
                 {% endif %}

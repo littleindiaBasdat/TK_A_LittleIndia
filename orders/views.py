@@ -35,18 +35,31 @@ def order_list_view(request):
     
     # Build SQL based on role
     sql = """
-        SELECT o.*,
-               c.full_name as customer_name, c.customer_id as customer_id
+        SELECT DISTINCT o.*,
+               c.full_name as customer_name,
+               e.event_title as event_name
         FROM "ORDER" o
         LEFT JOIN customer c ON o.customer_id = c.customer_id
+        LEFT JOIN ticket t ON o.order_id = t.order_id
+        LEFT JOIN ticket_category tc ON t.category_id = tc.category_id
+        LEFT JOIN event e ON tc.event_id = e.event_id
         WHERE 1=1
     """
     params = []
     
     # Role-based filtering
     if user_role == 'customer':
-        sql += " AND o.customer_id = %s"
-        params.append(user_id)
+        # Get customer_id from user_id
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT customer_id FROM customer WHERE user_id = %s",
+                [user_id]
+            )
+            customer_row = cursor.fetchone()
+            if customer_row:
+                customer_id = customer_row[0]
+                sql += " AND o.customer_id = %s"
+                params.append(customer_id)
     elif user_role == 'organizer':
         # For organizer, filter by orders that have tickets in their events
         sql += """ AND o.order_id IN (
@@ -80,17 +93,26 @@ def order_list_view(request):
     stat_sql = """
         SELECT 
             COUNT(*) as total_orders,
-            SUM(CASE WHEN payment_status = 'paid' THEN 1 ELSE 0 END) as paid_count,
-            SUM(CASE WHEN payment_status = 'pending' THEN 1 ELSE 0 END) as pending_count,
-            COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN total_amount ELSE 0 END), 0) as revenue
+            SUM(CASE WHEN payment_status = 'Lunas' THEN 1 ELSE 0 END) as paid_count,
+            SUM(CASE WHEN payment_status = 'Pending' THEN 1 ELSE 0 END) as pending_count,
+            COALESCE(SUM(CASE WHEN payment_status = 'Lunas' THEN total_amount ELSE 0 END), 0) as revenue
         FROM "ORDER" o
         WHERE 1=1
     """
     stat_params = []
     
     if user_role == 'customer':
-        stat_sql += " AND o.customer_id = %s"
-        stat_params.append(user_id)
+        # Get customer_id from user_id for stats
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT customer_id FROM customer WHERE user_id = %s",
+                [user_id]
+            )
+            customer_row = cursor.fetchone()
+            if customer_row:
+                customer_id = customer_row[0]
+                stat_sql += " AND o.customer_id = %s"
+                stat_params.append(customer_id)
     elif user_role == 'organizer':
         stat_sql += """ AND o.order_id IN (
             SELECT DISTINCT t.order_id FROM ticket t
@@ -120,16 +142,22 @@ def order_list_view(request):
 
 
 @raw_sql_login_required
+@raw_sql_login_required
 def order_create_view(request):
     if request.user.role != 'customer':
         messages.error(request, 'Hanya customer yang dapat membuat order.')
         return redirect('order_list')
     
-    # Fetch categories
+    # Fetch categories dengan join event untuk display
     with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT * FROM ticket_category ORDER BY category_id"
-        )
+        cursor.execute("""
+            SELECT tc.category_id, tc.category_name, tc.quota, tc.price, tc.event_id,
+                   e.event_title, e.event_datetime, v.venue_name
+            FROM ticket_category tc
+            JOIN event e ON tc.event_id = e.event_id
+            LEFT JOIN venue v ON e.venue_id = v.venue_id
+            ORDER BY e.event_datetime DESC, tc.category_name
+        """)
         cols = [col[0] for col in cursor.description]
         categories = [dict(zip(cols, row)) for row in cursor.fetchall()]
     
@@ -188,10 +216,21 @@ def order_create_view(request):
                 # Create order (only with valid columns)
                 order_id = str(uuid.uuid4())
                 with connection.cursor() as cursor:
+                    # Get customer_id from user_id
+                    cursor.execute(
+                        "SELECT customer_id FROM customer WHERE user_id = %s",
+                        [request.user.id]
+                    )
+                    customer_row = cursor.fetchone()
+                    if not customer_row:
+                        messages.error(request, 'Data customer tidak ditemukan.')
+                        return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions})
+                    customer_id = customer_row[0]
+                    
                     cursor.execute(
                         """INSERT INTO "ORDER" (order_id, customer_id, total_amount, payment_status, order_date)
                            VALUES (%s, %s, %s, %s, %s)""",
-                        [order_id, request.user.id, total, 'pending', timezone.now()]
+                        [order_id, customer_id, total, 'Pending', timezone.now()]
                     )
                     
                     # Link promotion if applied

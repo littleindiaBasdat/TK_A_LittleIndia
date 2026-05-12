@@ -23,7 +23,6 @@
 <table>
     <thead>
         <tr>
-            <th>Artist ID</th>
             <th>Name</th>
             <th>Genre</th>
             {% if can_admin %}<th>Action</th>{% endif %}
@@ -32,7 +31,6 @@
     <tbody>
         {% for artist in artists %}
             <tr>
-                <td>{{ artist.id }}</td>
                 <td>{{ artist.name }}</td>
                 <td>{{ artist.genre|default:"-" }}</td>
                 {% if can_admin %}

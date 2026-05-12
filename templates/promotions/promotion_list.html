@@ -28,8 +28,7 @@
     <thead>
         <tr>
             <th>Kode Promo</th>
-            <th>Tipe</th>
-            <th>Nilai</th>
+            <th>Persentase / Nominal</th>
             <th>Tanggal Mulai</th>
             <th>Tanggal Berakhir</th>
             <th>Penggunaan</th>
@@ -40,8 +39,7 @@
         {% for promotion in promotions %}
             <tr>
                 <td>{{ promotion.promo_code }}</td>
-                <td>{{ promotion.get_discount_type_display }}</td>
-                <td>{% if promotion.discount_type == "percent" %}{{ promotion.discount_value }}%{% else %}Rp{{ promotion.discount_value }}{% endif %}</td>
+                <td>{% if promotion.discount_type == "PERCENTAGE" %}{{ promotion.discount_value }}%{% else %}Rp{{ promotion.discount_value }}{% endif %}</td>
                 <td>{{ promotion.start_date }}</td>
                 <td>{{ promotion.end_date }}</td>
                 <td>{{ promotion.usage_count }} / {{ promotion.usage_limit }}</td>

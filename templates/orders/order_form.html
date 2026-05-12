@@ -24,7 +24,7 @@
                 <select name="category" required>
                     <option value="">Pilih kategori tiket</option>
                     {% for category in categories %}
-                        <option value="{{ category.id }}">{{ category.event.title }} - {{ category.name }} - Rp{{ category.price }}</option>
+                        <option value="{{ category.category_id }}">{{ category.event_title }} - {{ category.category_name }} - Rp{{ category.price }}</option>
                     {% endfor %}
                 </select>
             </label>
@@ -36,7 +36,7 @@
             </label>
             <datalist id="promo-options">
                 {% for promotion in promotions %}
-                    <option value="{{ promotion.promo_code }}">{{ promotion.get_discount_type_display }}</option>
+                    <option value="{{ promotion.promo_code }}">{{ promotion.discount_type }}</option>
                 {% endfor %}
             </datalist>
         {% endif %}
