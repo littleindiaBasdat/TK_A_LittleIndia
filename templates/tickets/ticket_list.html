@@ -12,32 +12,34 @@
 </section>
 <form class="filters" method="get">
     <input name="q" value="{{ query }}" placeholder="Cari kode tiket atau event">
-    <select name="status">
-        <option value="">Semua Status</option>
-        <option value="active" {% if status_filter == "active" %}selected{% endif %}>Aktif</option>
-        <option value="used" {% if status_filter == "used" %}selected{% endif %}>Digunakan</option>
-        <option value="cancelled" {% if status_filter == "cancelled" %}selected{% endif %}>Dibatalkan</option>
-    </select>
+    {# FIX: status filter dihapus karena kolom status tidak ada di schema #}
     <button class="primary" type="submit">Filter</button>
 </form>
 <section class="grid">
     {% for ticket in tickets %}
         <article class="card">
-            <span class="chip">{{ ticket.get_status_display }}</span>
             <div>
-                <h2>{{ ticket.code }}</h2>
+                {# FIX: ticket_code (bukan code), semua field pakai nama kolom DB hasil JOIN #}
+                <h2>{{ ticket.ticket_code }}</h2>
                 <div class="meta">
-                    <span>Event: {{ ticket.order.event.title }}</span>
-                    <span>Kategori: {{ ticket.category.name }} - Rp{{ ticket.category.price }}</span>
-                    <span>Pelanggan: {{ ticket.order.customer.display_name }}</span>
-                    <span>Venue: {{ ticket.order.event.venue.name }}</span>
-                    <span>Kursi: {% if ticket.seat %}{{ ticket.seat.label }}{% else %}Tanpa Kursi{% endif %}</span>
+                    <span>Event: {{ ticket.event_title|default:"-" }}</span>
+                    <span>Kategori: {{ ticket.category_name|default:"-" }} - Rp{{ ticket.category_price|default:"0" }}</span>
+                    <span>Pelanggan: {{ ticket.customer_name|default:"-" }}</span>
+                    <span>Venue: {{ ticket.venue_name|default:"-" }}</span>
+                    <span>Kursi:
+                        {% if ticket.seat_id %}
+                            {{ ticket.seat_section }} - Baris {{ ticket.seat_row }} No. {{ ticket.seat_number }}
+                        {% else %}
+                            Tanpa Kursi
+                        {% endif %}
+                    </span>
                 </div>
             </div>
             {% if can_admin %}
                 <div class="actions">
-                    <a class="button secondary" href="{% url 'ticket_update' ticket.id %}">Update</a>
-                    <a class="button danger" href="{% url 'ticket_delete' ticket.id %}">Delete</a>
+                    {# FIX: ticket_id (bukan id) #}
+                    <a class="button secondary" href="{% url 'ticket_update' ticket.ticket_id %}">Update</a>
+                    <a class="button danger" href="{% url 'ticket_delete' ticket.ticket_id %}">Delete</a>
                 </div>
             {% endif %}
         </article>

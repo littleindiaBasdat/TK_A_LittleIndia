@@ -1,35 +1,77 @@
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
-from django.db.models import Q
-from django.shortcuts import get_object_or_404, redirect, render
-from venues.models import Venue
-from .models import Seat
+from accounts.middleware import raw_sql_login_required
+from django.shortcuts import redirect, render
+from django.db import connection
 
 
 def can_manage(user):
     return user.is_authenticated and user.role in ['admin', 'organizer']
 
 
-@login_required
+@raw_sql_login_required
 def seat_list_view(request):
-    seats = Seat.objects.select_related('venue').all()
     query = request.GET.get('q', '').strip()
-    venue_filter = request.GET.get('venue', '')
-    status_filter = request.GET.get('status', '')
+    venue_filter = request.GET.get('venue', '').strip()
+    status_filter = request.GET.get('status', '').strip()
+
+    # Build SQL query
+    # FIX: kolom di DB adalah seat_number dan row_number (sesuai DDL)
+    sql = """
+        SELECT s.*, v.venue_name as venue_name
+        FROM seat s
+        LEFT JOIN venue v ON s.venue_id = v.venue_id
+        WHERE 1=1
+    """
+    params = []
+
+    # Query filter
     if query:
-        seats = seats.filter(Q(section__icontains=query) | Q(row__icontains=query) | Q(number__icontains=query) | Q(venue__name__icontains=query))
+        sql += """ AND (LOWER(s.section) LIKE LOWER(%s)
+                      OR LOWER(s.row_number) LIKE LOWER(%s)
+                      OR LOWER(s.seat_number) LIKE LOWER(%s)
+                      OR LOWER(v.venue_name) LIKE LOWER(%s))"""
+        params.extend([f"%{query}%", f"%{query}%", f"%{query}%", f"%{query}%"])
+
+    # Venue filter
     if venue_filter:
-        seats = seats.filter(venue_id=venue_filter)
+        sql += " AND s.venue_id = %s"
+        params.append(venue_filter)
+
+    # FIX: relasi seat <-> ticket lewat HAS_RELATIONSHIP, bukan kolom seat_id di ticket
     if status_filter == 'filled':
-        seats = seats.filter(ticket__isnull=False)
+        sql += " AND s.seat_id IN (SELECT DISTINCT seat_id FROM has_relationship)"
     elif status_filter == 'available':
-        seats = seats.filter(ticket__isnull=True)
-    total = seats.count()
-    filled = seats.filter(ticket__isnull=False).count()
+        sql += " AND s.seat_id NOT IN (SELECT DISTINCT seat_id FROM has_relationship)"
+
+    # Fetch seats
+    with connection.cursor() as cursor:
+        cursor.execute(sql, params)
+        cols = [col[0] for col in cursor.description]
+        seats = [dict(zip(cols, row)) for row in cursor.fetchall()]
+
+    # Fetch set of filled seat_ids dari has_relationship
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT DISTINCT seat_id FROM has_relationship")
+        filled_ids = {str(row[0]) for row in cursor.fetchall()}
+
+    # Tandai setiap seat apakah terisi atau tidak
+    for seat in seats:
+        seat['is_filled'] = str(seat['seat_id']) in filled_ids
+
+    # Fetch venues
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT * FROM venue ORDER BY venue_name")
+        cols = [col[0] for col in cursor.description]
+        venues = [dict(zip(cols, row)) for row in cursor.fetchall()]
+
+    # Calculate statistics
+    total = len(seats)
+    filled = len(filled_ids)
     available = total - filled
+
     return render(request, 'seats/seat_list.html', {
         'seats': seats,
-        'venues': Venue.objects.all().order_by('name'),
+        'venues': venues,
         'query': query,
         'venue_filter': venue_filter,
         'status_filter': status_filter,
@@ -40,71 +82,150 @@ def seat_list_view(request):
     })
 
 
-@login_required
+@raw_sql_login_required
 def seat_create_view(request):
     if not can_manage(request.user):
         messages.error(request, 'Anda tidak memiliki izin untuk menambah kursi.')
         return redirect('seat_list')
-    venues = Venue.objects.all().order_by('name')
+
+    # Fetch venues
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT * FROM venue ORDER BY venue_name")
+        cols = [col[0] for col in cursor.description]
+        venues = [dict(zip(cols, row)) for row in cursor.fetchall()]
+
     if request.method == 'POST':
         venue_id = request.POST.get('venue')
         section = request.POST.get('section', '').strip()
-        row = request.POST.get('row', '').strip()
-        number = request.POST.get('number', '').strip()
-        if not all([venue_id, section, row, number]):
+        # FIX: nama field form harus row_number & seat_number
+        row_number = request.POST.get('row_number', '').strip()
+        seat_number = request.POST.get('seat_number', '').strip()
+
+        if not all([venue_id, section, row_number, seat_number]):
             messages.error(request, 'Semua field wajib diisi.')
         else:
-            venue = get_object_or_404(Venue, pk=venue_id)
-            if Seat.objects.filter(venue=venue, section=section, row=row, number=number).exists():
-                messages.error(request, 'Kursi dengan kombinasi tersebut sudah ada.')
-            else:
-                Seat.objects.create(venue=venue, section=section, row=row, number=number)
-                messages.success(request, 'Kursi berhasil ditambahkan.')
-                return redirect('seat_list')
+            with connection.cursor() as cursor:
+                # Check if venue exists
+                cursor.execute("SELECT 1 FROM venue WHERE venue_id = %s", [venue_id])
+                if not cursor.fetchone():
+                    messages.error(request, 'Venue tidak ditemukan.')
+                    return render(request, 'seats/seat_form.html', {'venues': venues, 'action': 'create'})
+
+                # Check duplicate
+                cursor.execute(
+                    """SELECT 1 FROM seat
+                       WHERE venue_id = %s AND section = %s
+                         AND row_number = %s AND seat_number = %s""",
+                    [venue_id, section, row_number, seat_number]
+                )
+                if cursor.fetchone():
+                    messages.error(request, 'Kursi dengan kombinasi tersebut sudah ada.')
+                    return render(request, 'seats/seat_form.html', {'venues': venues, 'action': 'create'})
+
+                # Create seat
+                cursor.execute(
+                    """INSERT INTO seat (venue_id, section, row_number, seat_number)
+                       VALUES (%s, %s, %s, %s)""",
+                    [venue_id, section, row_number, seat_number]
+                )
+
+            messages.success(request, 'Kursi berhasil ditambahkan.')
+            return redirect('seat_list')
+
     return render(request, 'seats/seat_form.html', {'venues': venues, 'action': 'create'})
 
 
-@login_required
+@raw_sql_login_required
 def seat_update_view(request, pk):
     if not can_manage(request.user):
         messages.error(request, 'Anda tidak memiliki izin untuk mengubah kursi.')
         return redirect('seat_list')
-    seat = get_object_or_404(Seat, pk=pk)
-    venues = Venue.objects.all().order_by('name')
+
+    # Fetch seat
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT * FROM seat WHERE seat_id = %s", [pk])
+        cols = [col[0] for col in cursor.description]
+        seat_row = cursor.fetchone()
+        if not seat_row:
+            messages.error(request, 'Kursi tidak ditemukan.')
+            return redirect('seat_list')
+        seat = dict(zip(cols, seat_row))
+
+    # Fetch venues
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT * FROM venue ORDER BY venue_name")
+        cols = [col[0] for col in cursor.description]
+        venues = [dict(zip(cols, row)) for row in cursor.fetchall()]
+
     if request.method == 'POST':
         venue_id = request.POST.get('venue')
         section = request.POST.get('section', '').strip()
-        row = request.POST.get('row', '').strip()
-        number = request.POST.get('number', '').strip()
-        if not all([venue_id, section, row, number]):
+        row_number = request.POST.get('row_number', '').strip()
+        seat_number = request.POST.get('seat_number', '').strip()
+
+        if not all([venue_id, section, row_number, seat_number]):
             messages.error(request, 'Semua field wajib diisi.')
         else:
-            venue = get_object_or_404(Venue, pk=venue_id)
-            duplicate = Seat.objects.filter(venue=venue, section=section, row=row, number=number).exclude(pk=seat.pk).exists()
-            if duplicate:
-                messages.error(request, 'Kursi dengan kombinasi tersebut sudah ada.')
-            else:
-                seat.venue = venue
-                seat.section = section
-                seat.row = row
-                seat.number = number
-                seat.save()
-                messages.success(request, 'Kursi berhasil diperbarui.')
-                return redirect('seat_list')
+            with connection.cursor() as cursor:
+                # Check if venue exists
+                cursor.execute("SELECT 1 FROM venue WHERE venue_id = %s", [venue_id])
+                if not cursor.fetchone():
+                    messages.error(request, 'Venue tidak ditemukan.')
+                    return render(request, 'seats/seat_form.html', {'venues': venues, 'seat': seat, 'action': 'update'})
+
+                # Check duplicate (excluding current)
+                cursor.execute(
+                    """SELECT 1 FROM seat
+                       WHERE venue_id = %s AND section = %s
+                         AND row_number = %s AND seat_number = %s
+                         AND seat_id != %s""",
+                    [venue_id, section, row_number, seat_number, pk]
+                )
+                if cursor.fetchone():
+                    messages.error(request, 'Kursi dengan kombinasi tersebut sudah ada.')
+                    return render(request, 'seats/seat_form.html', {'venues': venues, 'seat': seat, 'action': 'update'})
+
+                # Update seat
+                cursor.execute(
+                    """UPDATE seat
+                       SET venue_id = %s, section = %s,
+                           row_number = %s, seat_number = %s
+                       WHERE seat_id = %s""",
+                    [venue_id, section, row_number, seat_number, pk]
+                )
+
+            messages.success(request, 'Kursi berhasil diperbarui.')
+            return redirect('seat_list')
+
     return render(request, 'seats/seat_form.html', {'venues': venues, 'seat': seat, 'action': 'update'})
 
 
-@login_required
+@raw_sql_login_required
 def seat_delete_view(request, pk):
     if not can_manage(request.user):
         messages.error(request, 'Anda tidak memiliki izin untuk menghapus kursi.')
         return redirect('seat_list')
-    seat = get_object_or_404(Seat, pk=pk)
-    if hasattr(seat, 'ticket'):
-        messages.error(request, 'Kursi ini sudah di-assign ke tiket dan tidak dapat dihapus. Hapus atau ubah tiket terlebih dahulu.')
-        return redirect('seat_list')
+
+    # Fetch seat
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT * FROM seat WHERE seat_id = %s", [pk])
+        cols = [col[0] for col in cursor.description]
+        seat_row = cursor.fetchone()
+        if not seat_row:
+            messages.error(request, 'Kursi tidak ditemukan.')
+            return redirect('seat_list')
+        seat = dict(zip(cols, seat_row))
+
+        # FIX: cek lewat has_relationship, bukan ticket.seat_id
+        cursor.execute("SELECT 1 FROM has_relationship WHERE seat_id = %s", [pk])
+        if cursor.fetchone():
+            messages.error(request, 'Kursi ini sudah di-assign ke tiket dan tidak dapat dihapus. Hapus atau ubah tiket terlebih dahulu.')
+            return redirect('seat_list')
+
     if request.method == 'POST':
-        seat.delete()
+        with connection.cursor() as cursor:
+            cursor.execute("DELETE FROM seat WHERE seat_id = %s", [pk])
         messages.success(request, 'Kursi berhasil dihapus.')
         return redirect('seat_list')
+
     return render(request, 'seats/seat_confirm_delete.html', {'seat': seat})

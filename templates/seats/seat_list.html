@@ -20,7 +20,8 @@
     <select name="venue">
         <option value="">Semua Venue</option>
         {% for venue in venues %}
-            <option value="{{ venue.id }}" {% if venue_filter == venue.id|stringformat:"s" %}selected{% endif %}>{{ venue.name }}</option>
+            {# FIX: venue_id & venue_name (bukan venue.id & venue.name) #}
+            <option value="{{ venue.venue_id }}" {% if venue_filter == venue.venue_id|stringformat:"s" %}selected{% endif %}>{{ venue.venue_name }}</option>
         {% endfor %}
     </select>
     <select name="status">
@@ -44,12 +45,16 @@
     <tbody>
         {% for seat in seats %}
             <tr>
-                <td>{{ seat.venue.name }}</td>
+                {# FIX: venue_name (join dari views.py), row_number, seat_number, seat_id #}
+                <td>{{ seat.venue_name }}</td>
                 <td>{{ seat.section }}</td>
-                <td>{{ seat.row }}</td>
-                <td>{{ seat.number }}</td>
+                <td>{{ seat.row_number }}</td>
+                <td>{{ seat.seat_number }}</td>
                 <td>
-                    {% if seat.ticket %}
+                    {# FIX: status ditentukan dari views — tambahkan key 'is_filled' di views,
+                       atau pakai logika di sini via has_relationship check.
+                       Untuk sekarang kita tambahkan is_filled dari views.py (lihat catatan di bawah) #}
+                    {% if seat.is_filled %}
                         <span class="chip red">Terisi</span>
                     {% else %}
                         <span class="chip">Tersedia</span>
@@ -58,11 +63,11 @@
                 {% if can_manage %}
                     <td>
                         <div class="actions">
-                            <a class="button secondary" href="{% url 'seat_update' seat.id %}">Update</a>
-                            {% if seat.ticket %}
+                            <a class="button secondary" href="{% url 'seat_update' seat.seat_id %}">Update</a>
+                            {% if seat.is_filled %}
                                 <span class="button secondary">Delete</span>
                             {% else %}
-                                <a class="button danger" href="{% url 'seat_delete' seat.id %}">Delete</a>
+                                <a class="button danger" href="{% url 'seat_delete' seat.seat_id %}">Delete</a>
                             {% endif %}
                         </div>
                     </td>

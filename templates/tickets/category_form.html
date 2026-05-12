@@ -9,12 +9,16 @@
             <select name="event" required>
                 <option value="">Pilih event</option>
                 {% for event in events %}
-                    <option value="{{ event.id }}" {% if category.event_id == event.id %}selected{% endif %}>{{ event.title }} - {{ event.venue.name|default:"Venue belum dipilih" }}</option>
+                    {# FIX: event_id & event_title (bukan id & title), venue_name dari JOIN #}
+                    <option value="{{ event.event_id }}" {% if category.event_id == event.event_id %}selected{% endif %}>
+                        {{ event.event_title }}{% if event.venue_name %} - {{ event.venue_name }}{% endif %}
+                    </option>
                 {% endfor %}
             </select>
         </label>
         <label>Category Name
-            <input name="name" value="{{ category.name|default:'' }}" required>
+            {# FIX: value pakai category_name (bukan name), tapi name attribute form tetap "name" agar POST terbaca di views #}
+            <input name="name" value="{{ category.category_name|default:'' }}" required>
         </label>
         <label>Quota
             <input type="number" min="1" name="quota" value="{{ category.quota|default:'' }}" required>

@@ -4,11 +4,11 @@
 <section class="auth-shell">
     <div class="panel auth-card">
         <h1>Login</h1>
-        <p>Masuk menggunakan email dan password akun TikTakTuk.</p>
+        <p>Masuk menggunakan username dan password akun TikTakTuk.</p>
         <form class="stack" method="post">
             {% csrf_token %}
-            <label>Email
-                <input type="email" name="email" required autocomplete="email">
+            <label>Username
+                <input type="text" name="username" required autocomplete="username">
             </label>
             <label>Password
                 <input type="password" name="password" required autocomplete="current-password">

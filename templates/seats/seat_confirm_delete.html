@@ -3,7 +3,8 @@
 {% block content %}
 <section class="panel">
     <h1>Delete Kursi</h1>
-    <p>Anda yakin ingin menghapus kursi {{ seat.venue.name }} - {{ seat.label }}?</p>
+    {# FIX: venue_name (dari join), seat_number & row_number (nama kolom DB) #}
+    <p>Anda yakin ingin menghapus kursi <strong>{{ seat.venue_name }}</strong> - Section {{ seat.section }}, Baris {{ seat.row_number }}, No. {{ seat.seat_number }}?</p>
     <form class="actions" method="post">
         {% csrf_token %}
         <button class="danger" type="submit">Hapus</button>

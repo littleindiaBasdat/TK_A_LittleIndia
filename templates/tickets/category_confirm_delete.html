@@ -3,8 +3,9 @@
 {% block content %}
 <section class="panel">
     <h1>Delete Kategori Tiket</h1>
-    <p>Category ID: {{ category.id }}</p>
-    <p>Category Name: {{ category.name }}</p>
+    {# FIX: category_id & category_name (bukan id & name) #}
+    <p>Category ID: {{ category.category_id }}</p>
+    <p>Category Name: {{ category.category_name }}</p>
     <form class="actions" method="post">
         {% csrf_token %}
         <button class="danger" type="submit">Confirm Deletion</button>

@@ -10,7 +10,8 @@
                 <select name="order" required>
                     <option value="">Pilih order</option>
                     {% for order in orders %}
-                        <option value="{{ order.id }}">{{ order.id }} - {{ order.customer.display_name }} - {{ order.event.title }}</option>
+                        {# FIX: order_id (bukan id), customer_name dari JOIN #}
+                        <option value="{{ order.order_id }}">{{ order.order_id }} - {{ order.customer_name }}</option>
                     {% endfor %}
                 </select>
             </label>
@@ -18,36 +19,35 @@
                 <select name="category" required>
                     <option value="">Pilih kategori</option>
                     {% for category in categories %}
-                        <option value="{{ category.id }}">{{ category.event.title }} - {{ category.name }} - Rp{{ category.price }}</option>
+                        {# FIX: category_id, category_name, event_title dari JOIN #}
+                        <option value="{{ category.category_id }}">{{ category.event_title }} - {{ category.category_name }} - Rp{{ category.price }}</option>
                     {% endfor %}
                 </select>
             </label>
-            <label>Kursi
+            <label>Kursi (Opsional)
                 <select name="seat">
                     <option value="">Tanpa Kursi</option>
                     {% for seat in seats %}
-                        <option value="{{ seat.id }}">{{ seat.venue.name }} - {{ seat.label }}</option>
+                        {# FIX: seat_id, venue_name, seat_number, row_number #}
+                        <option value="{{ seat.seat_id }}">{{ seat.venue_name }} - {{ seat.section }} Baris {{ seat.row_number }} No. {{ seat.seat_number }}</option>
                     {% endfor %}
                 </select>
             </label>
         {% else %}
             <div class="meta">
-                <span>Kode Tiket: {{ ticket.code }}</span>
-                <span>Event: {{ ticket.order.event.title }}</span>
-                <span>Kategori: {{ ticket.category.name }}</span>
+                {# FIX: ticket_code (bukan code), field dari dict hasil raw SQL #}
+                <span>Kode Tiket: {{ ticket.ticket_code }}</span>
+                <span>Kategori ID: {{ ticket.category_id }}</span>
+                <span>Order ID: {{ ticket.order_id }}</span>
             </div>
-            <label>Status
-                <select name="status" required>
-                    <option value="active" {% if ticket.status == "active" %}selected{% endif %}>Aktif</option>
-                    <option value="used" {% if ticket.status == "used" %}selected{% endif %}>Digunakan</option>
-                    <option value="cancelled" {% if ticket.status == "cancelled" %}selected{% endif %}>Dibatalkan</option>
-                </select>
-            </label>
-            <label>Kursi
+            <label>Kursi (Opsional)
                 <select name="seat">
                     <option value="">Tanpa Kursi</option>
                     {% for seat in seats %}
-                        <option value="{{ seat.id }}" {% if ticket.seat_id == seat.id %}selected{% endif %}>{{ seat.venue.name }} - {{ seat.label }}</option>
+                        {# FIX: bandingkan seat_id dari has_relationship yang sudah ada di ticket dict #}
+                        <option value="{{ seat.seat_id }}" {% if ticket.seat_id == seat.seat_id %}selected{% endif %}>
+                            {{ seat.venue_name }} - {{ seat.section }} Baris {{ seat.row_number }} No. {{ seat.seat_number }}
+                        </option>
                     {% endfor %}
                 </select>
             </label>

@@ -1,17 +1,40 @@
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
+from django.db import connection
 from events.models import Artist
 
 
 def artist_list_view(request):
-    artists = Artist.objects.all().order_by('name')
     query = request.GET.get('q', '').strip()
     genre_filter = request.GET.get('genre', '').strip()
+    
+    # Build SQL query untuk artists
+    sql = "SELECT * FROM artist WHERE 1=1"
+    params = []
+    
     if query:
-        artists = artists.filter(name__icontains=query)
+        sql += " AND name ILIKE %s"
+        params.append(f"%{query}%")
+    
     if genre_filter:
-        artists = artists.filter(genre__iexact=genre_filter)
-    genres = Artist.objects.exclude(genre='').values_list('genre', flat=True).distinct().order_by('genre')
+        sql += " AND genre ILIKE %s"
+        params.append(f"%{genre_filter}%")
+    
+    sql += " ORDER BY name"
+    
+    # Fetch artists dengan parameter binding
+    with connection.cursor() as cursor:
+        cursor.execute(sql, params)
+        cols = [col[0] for col in cursor.description]
+        artists = [dict(zip(cols, row)) for row in cursor.fetchall()]
+    
+    # Fetch distinct genres
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT DISTINCT genre FROM artist WHERE genre != '' ORDER BY genre"
+        )
+        genres = [row[0] for row in cursor.fetchall()]
+    
     return render(request, 'artists/artist_list.html', {
         'artists': artists,
         'genres': genres,

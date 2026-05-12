@@ -1,76 +1,149 @@
 from decimal import Decimal
 import uuid
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
-from django.db.models import F, Q, Sum
-from django.shortcuts import get_object_or_404, redirect, render
+from accounts.middleware import raw_sql_login_required
+from django.shortcuts import redirect, render
 from django.utils import timezone
-from promotions.models import Promotion
-from tickets.models import TicketCategory
+from django.db import connection
 from .models import Order
 
 
-def scoped_orders(user):
-    orders = Order.objects.select_related('customer', 'event__organizer', 'promotion').all()
-    if user.role == 'customer':
-        return orders.filter(customer=user)
-    if user.role == 'organizer':
-        return orders.filter(event__organizer=user)
-    return orders
-
-
-def apply_discount(subtotal, promotion):
-    if not promotion:
+def apply_discount(subtotal, promotion_data):
+    if not promotion_data:
         return subtotal
-    if promotion.discount_type == 'percent':
-        discount = subtotal * promotion.discount_value / Decimal('100')
+    discount_type = promotion_data.get('discount_type')
+    discount_value = Decimal(str(promotion_data.get('discount_value', 0)))
+    if discount_type == 'percent':
+        discount = subtotal * discount_value / Decimal('100')
     else:
-        discount = promotion.discount_value
+        discount = discount_value
     total = subtotal - discount
     return total if total > 0 else Decimal('0')
 
 
-@login_required
+def dict_from_cursor(cursor):
+    cols = [col[0] for col in cursor.description]
+    return lambda row: dict(zip(cols, row))
+
+
+@raw_sql_login_required
 def order_list_view(request):
-    orders = scoped_orders(request.user).order_by('-order_date')
     query = request.GET.get('q', '').strip()
-    status_filter = request.GET.get('status', '')
+    status_filter = request.GET.get('status', '').strip()
+    user_id = request.user.id
+    user_role = request.user.role
+    
+    # Build SQL based on role
+    sql = """
+        SELECT o.*,
+               c.full_name as customer_name, c.customer_id as customer_id
+        FROM "ORDER" o
+        LEFT JOIN customer c ON o.customer_id = c.customer_id
+        WHERE 1=1
+    """
+    params = []
+    
+    # Role-based filtering
+    if user_role == 'customer':
+        sql += " AND o.customer_id = %s"
+        params.append(user_id)
+    elif user_role == 'organizer':
+        # For organizer, filter by orders that have tickets in their events
+        sql += """ AND o.order_id IN (
+            SELECT DISTINCT t.order_id FROM ticket t
+            JOIN ticket_category tc ON t.category_id = tc.category_id
+            WHERE tc.event_id IN (
+                SELECT e.event_id FROM event e 
+                WHERE e.organizer_id IN (SELECT organizer_id FROM organizer WHERE user_id = %s)
+            )
+        )"""
+        params.append(user_id)
+    
+    # Query and status filters
     if query:
-        query_filter = Q(event__title__icontains=query) | Q(customer__full_name__icontains=query)
-        try:
-            query_filter |= Q(id=uuid.UUID(query))
-        except ValueError:
-            pass
-        orders = orders.filter(query_filter)
+        sql += " AND (LOWER(c.full_name) LIKE LOWER(%s) OR o.order_id::text = %s)"
+        params.extend([f"%{query}%", query])
+    
     if status_filter:
-        orders = orders.filter(payment_status=status_filter)
-    paid_orders = orders.filter(payment_status='paid')
-    pending_orders = orders.filter(payment_status='pending')
-    revenue = paid_orders.aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
+        sql += " AND o.payment_status = %s"
+        params.append(status_filter)
+    
+    sql += " ORDER BY o.order_date DESC"
+    
+    # Fetch orders
+    with connection.cursor() as cursor:
+        cursor.execute(sql, params)
+        cols = [col[0] for col in cursor.description]
+        orders = [dict(zip(cols, row)) for row in cursor.fetchall()]
+    
+    # Get statistics
+    stat_sql = """
+        SELECT 
+            COUNT(*) as total_orders,
+            SUM(CASE WHEN payment_status = 'paid' THEN 1 ELSE 0 END) as paid_count,
+            SUM(CASE WHEN payment_status = 'pending' THEN 1 ELSE 0 END) as pending_count,
+            COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN total_amount ELSE 0 END), 0) as revenue
+        FROM "ORDER" o
+        WHERE 1=1
+    """
+    stat_params = []
+    
+    if user_role == 'customer':
+        stat_sql += " AND o.customer_id = %s"
+        stat_params.append(user_id)
+    elif user_role == 'organizer':
+        stat_sql += """ AND o.order_id IN (
+            SELECT DISTINCT t.order_id FROM ticket t
+            JOIN ticket_category tc ON t.category_id = tc.category_id
+            WHERE tc.event_id IN (
+                SELECT e.event_id FROM event e 
+                WHERE e.organizer_id IN (SELECT organizer_id FROM organizer WHERE user_id = %s)
+            )
+        )"""
+        stat_params.append(user_id)
+    
+    with connection.cursor() as cursor:
+        cursor.execute(stat_sql, stat_params)
+        stats = dict(zip([col[0] for col in cursor.description], cursor.fetchone()))
+    
     return render(request, 'orders/order_list.html', {
         'orders': orders,
         'query': query,
         'status_filter': status_filter,
-        'total_orders': orders.count(),
-        'paid_count': paid_orders.count(),
-        'pending_count': pending_orders.count(),
-        'revenue': revenue,
+        'total_orders': stats.get('total_orders', 0),
+        'paid_count': stats.get('paid_count', 0),
+        'pending_count': stats.get('pending_count', 0),
+        'revenue': stats.get('revenue', Decimal('0')),
         'can_create': request.user.role == 'customer',
         'can_admin': request.user.role == 'admin',
     })
 
 
-@login_required
+@raw_sql_login_required
 def order_create_view(request):
     if request.user.role != 'customer':
         messages.error(request, 'Hanya customer yang dapat membuat order.')
         return redirect('order_list')
-    categories = TicketCategory.objects.select_related('event__venue').all()
-    promotions = Promotion.objects.all()
+    
+    # Fetch categories
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT * FROM ticket_category ORDER BY category_id"
+        )
+        cols = [col[0] for col in cursor.description]
+        categories = [dict(zip(cols, row)) for row in cursor.fetchall()]
+    
+    # Fetch promotions
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT * FROM promotion ORDER BY promo_code")
+        cols = [col[0] for col in cursor.description]
+        promotions = [dict(zip(cols, row)) for row in cursor.fetchall()]
+    
     if request.method == 'POST':
         category_id = request.POST.get('category')
         quantity_raw = request.POST.get('quantity', '1')
         promo_code = request.POST.get('promo_code', '').strip()
+        
         if not category_id or not quantity_raw.isdigit():
             messages.error(request, 'Kategori tiket dan jumlah tiket wajib diisi dengan benar.')
         else:
@@ -78,58 +151,114 @@ def order_create_view(request):
             if quantity < 1 or quantity > 10:
                 messages.error(request, 'Jumlah tiket harus 1 sampai 10.')
             else:
-                category = get_object_or_404(categories, pk=category_id)
+                # Fetch category
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT * FROM ticket_category WHERE category_id = %s", [category_id])
+                    cols = [col[0] for col in cursor.description]
+                    category_row = cursor.fetchone()
+                    if not category_row:
+                        messages.error(request, 'Kategori tiket tidak ditemukan.')
+                        return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions})
+                    category = dict(zip(cols, category_row))
+                
                 promotion = None
+                promotion_id = None
                 if promo_code:
                     today = timezone.localdate()
-                    promotion = Promotion.objects.filter(
-                        promo_code__iexact=promo_code,
-                        start_date__lte=today,
-                        end_date__gte=today,
-                        usage_count__lt=F('usage_limit'),
-                    ).first()
-                    if not promotion:
-                        messages.error(request, 'Kode promo tidak valid atau sudah tidak tersedia.')
-                        return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions})
-                subtotal = category.price * quantity
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            """SELECT * FROM promotion 
+                               WHERE LOWER(promo_code) = LOWER(%s) 
+                               AND start_date <= %s 
+                               AND end_date >= %s 
+                               AND usage_count < usage_limit""",
+                            [promo_code, today, today]
+                        )
+                        cols = [col[0] for col in cursor.description]
+                        promo_row = cursor.fetchone()
+                        if not promo_row:
+                            messages.error(request, 'Kode promo tidak valid atau sudah tidak tersedia.')
+                            return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions})
+                        promotion = dict(zip(cols, promo_row))
+                        promotion_id = promotion['promotion_id']  # Fixed: promotion_id not id
+                
+                subtotal = Decimal(str(category['price'])) * quantity
                 total = apply_discount(subtotal, promotion)
-                order = Order.objects.create(
-                    customer=request.user,
-                    event=category.event,
-                    promotion=promotion,
-                    total_amount=total,
-                    payment_status='pending',
-                )
-                if promotion:
-                    promotion.usage_count += 1
-                    promotion.save()
-                messages.success(request, f'Order {order.id} berhasil dibuat.')
+                
+                # Create order (only with valid columns)
+                order_id = str(uuid.uuid4())
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """INSERT INTO "ORDER" (order_id, customer_id, total_amount, payment_status, order_date)
+                           VALUES (%s, %s, %s, %s, %s)""",
+                        [order_id, request.user.id, total, 'pending', timezone.now()]
+                    )
+                    
+                    # Link promotion if applied
+                    if promotion_id:
+                        cursor.execute(
+                            "INSERT INTO order_promotion (order_id, promotion_id) VALUES (%s, %s)",
+                            [order_id, promotion_id]
+                        )
+                        # Increment promotion usage
+                        cursor.execute(
+                            "UPDATE promotion SET usage_count = usage_count + 1 WHERE promotion_id = %s",
+                            [promotion_id]
+                        )
+                
+                messages.success(request, f'Order {order_id} berhasil dibuat.')
                 return redirect('order_list')
+    
     return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions})
 
 
-@login_required
+@raw_sql_login_required
 def order_update_view(request, pk):
     if request.user.role != 'admin':
         messages.error(request, 'Hanya admin yang dapat mengubah order.')
         return redirect('order_list')
-    order = get_object_or_404(Order.objects.select_related('customer', 'event'), pk=pk)
+    
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT * FROM \"ORDER\" WHERE order_id = %s", [pk])
+        cols = [col[0] for col in cursor.description]
+        order_row = cursor.fetchone()
+        if not order_row:
+            messages.error(request, 'Order tidak ditemukan.')
+            return redirect('order_list')
+        order = dict(zip(cols, order_row))
+    
     if request.method == 'POST':
-        order.payment_status = request.POST.get('payment_status', order.payment_status)
-        order.save()
+        payment_status = request.POST.get('payment_status', 'pending')
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE \"ORDER\" SET payment_status = %s WHERE order_id = %s",
+                [payment_status, pk]
+            )
         messages.success(request, 'Order berhasil diperbarui.')
         return redirect('order_list')
+    
     return render(request, 'orders/order_form.html', {'order': order, 'action': 'update'})
 
 
-@login_required
+@raw_sql_login_required
 def order_delete_view(request, pk):
     if request.user.role != 'admin':
         messages.error(request, 'Hanya admin yang dapat menghapus order.')
         return redirect('order_list')
-    order = get_object_or_404(Order, pk=pk)
+    
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT * FROM \"ORDER\" WHERE order_id = %s", [pk])
+        cols = [col[0] for col in cursor.description]
+        order_row = cursor.fetchone()
+        if not order_row:
+            messages.error(request, 'Order tidak ditemukan.')
+            return redirect('order_list')
+        order = dict(zip(cols, order_row))
+    
     if request.method == 'POST':
-        order.delete()
+        with connection.cursor() as cursor:
+            cursor.execute("DELETE FROM \"ORDER\" WHERE order_id = %s", [pk])
         messages.success(request, 'Order berhasil dihapus.')
         return redirect('order_list')
+    
     return render(request, 'orders/order_confirm_delete.html', {'order': order})

@@ -15,7 +15,8 @@
     <select name="event">
         <option value="">Semua Event</option>
         {% for event in events %}
-            <option value="{{ event.id }}" {% if event_filter == event.id|stringformat:"s" %}selected{% endif %}>{{ event.title }}</option>
+            {# FIX: event_id & event_title (bukan id & title) #}
+            <option value="{{ event.event_id }}" {% if event_filter == event.event_id|stringformat:"s" %}selected{% endif %}>{{ event.event_title }}</option>
         {% endfor %}
     </select>
     <button class="primary" type="submit">Filter</button>
@@ -35,17 +36,18 @@
     <tbody>
         {% for category in categories %}
             <tr>
-                <td>{{ category.id }}</td>
-                <td>{{ category.name }}</td>
+                {# FIX: category_id, category_name (bukan id, name), event_title & venue_name dari JOIN #}
+                <td>{{ category.category_id }}</td>
+                <td>{{ category.category_name }}</td>
                 <td>{{ category.quota }}</td>
                 <td>Rp{{ category.price }}</td>
-                <td>{{ category.event.title }}</td>
-                <td>{{ category.event.venue.name|default:"-" }}</td>
+                <td>{{ category.event_title|default:"-" }}</td>
+                <td>{{ category.venue_name|default:"-" }}</td>
                 {% if can_manage %}
                     <td>
                         <div class="actions">
-                            <a class="button secondary" href="{% url 'ticket_category_update' category.id %}">Update</a>
-                            <a class="button danger" href="{% url 'ticket_category_delete' category.id %}">Delete</a>
+                            <a class="button secondary" href="{% url 'ticket_category_update' category.category_id %}">Update</a>
+                            <a class="button danger" href="{% url 'ticket_category_delete' category.category_id %}">Delete</a>
                         </div>
                     </td>
                 {% endif %}

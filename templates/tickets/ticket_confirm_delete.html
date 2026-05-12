@@ -3,7 +3,8 @@
 {% block content %}
 <section class="panel">
     <h1>Delete Tiket</h1>
-    <p>Anda yakin ingin menghapus tiket {{ ticket.code }}?</p>
+    {# FIX: ticket_code (bukan code) #}
+    <p>Anda yakin ingin menghapus tiket <strong>{{ ticket.ticket_code }}</strong>?</p>
     <form class="actions" method="post">
         {% csrf_token %}
         <button class="danger" type="submit">Hapus</button>

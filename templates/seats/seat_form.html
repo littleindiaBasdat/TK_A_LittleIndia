@@ -9,7 +9,8 @@
             <select name="venue" required>
                 <option value="">Pilih venue</option>
                 {% for venue in venues %}
-                    <option value="{{ venue.id }}" {% if seat.venue_id == venue.id %}selected{% endif %}>{{ venue.name }} - {{ venue.city }}</option>
+                    {# FIX: venue_id & venue_name #}
+                    <option value="{{ venue.venue_id }}" {% if seat.venue_id == venue.venue_id %}selected{% endif %}>{{ venue.venue_name }} - {{ venue.city }}</option>
                 {% endfor %}
             </select>
         </label>
@@ -17,10 +18,12 @@
             <input name="section" value="{{ seat.section|default:'' }}" required>
         </label>
         <label>Baris
-            <input name="row" value="{{ seat.row|default:'' }}" required>
+            {# FIX: name="row_number" dan key row_number #}
+            <input name="row_number" value="{{ seat.row_number|default:'' }}" required>
         </label>
         <label>No. Kursi
-            <input name="number" value="{{ seat.number|default:'' }}" required>
+            {# FIX: name="seat_number" dan key seat_number #}
+            <input name="seat_number" value="{{ seat.seat_number|default:'' }}" required>
         </label>
         <div class="actions">
             <button class="primary" type="submit">{% if action == "create" %}Tambah{% else %}Simpan{% endif %}</button>

@@ -1,7 +1,6 @@
 from django.contrib import messages
-from django.db.models import Sum
-from django.shortcuts import get_object_or_404, redirect, render
-from .models import Promotion
+from django.shortcuts import redirect, render
+from django.db import connection
 
 
 def can_admin(user):
@@ -9,21 +8,52 @@ def can_admin(user):
 
 
 def promotion_list_view(request):
-    promotions = Promotion.objects.all()
     query = request.GET.get('q', '').strip()
-    discount_filter = request.GET.get('type', '')
+    discount_filter = request.GET.get('type', '').strip()
+    
+    # Build SQL query
+    sql = "SELECT * FROM promotion WHERE 1=1"
+    params = []
+    
     if query:
-        promotions = promotions.filter(promo_code__icontains=query)
+        sql += " AND promo_code ILIKE %s"
+        params.append(f"%{query}%")
+    
     if discount_filter:
-        promotions = promotions.filter(discount_type=discount_filter)
-    total_usage = promotions.aggregate(total=Sum('usage_count'))['total'] or 0
+        sql += " AND discount_type = %s"
+        params.append(discount_filter)
+    
+    # Fetch promotions
+    with connection.cursor() as cursor:
+        cursor.execute(sql, params)
+        cols = [col[0] for col in cursor.description]
+        promotions = [dict(zip(cols, row)) for row in cursor.fetchall()]
+    
+    # Calculate statistics
+    total_usage = 0
+    percent_count = 0
+    with connection.cursor() as cursor:
+        try:
+            cursor.execute(
+                "SELECT COALESCE(SUM(usage_count), 0) as total_usage FROM promotion"
+            )
+            total_usage = cursor.fetchone()[0]
+        except:
+            # Column might not exist or different schema
+            total_usage = 0
+        
+        cursor.execute(
+            "SELECT COUNT(*) as percent_count FROM promotion WHERE discount_type = 'percent'"
+        )
+        percent_count = cursor.fetchone()[0]
+    
     return render(request, 'promotions/promotion_list.html', {
         'promotions': promotions,
         'query': query,
         'discount_filter': discount_filter,
-        'total_promos': promotions.count(),
+        'total_promos': len(promotions),
         'total_usage': total_usage,
-        'percent_count': promotions.filter(discount_type='percent').count(),
+        'percent_count': percent_count,
         'can_admin': can_admin(request.user),
     })
 
@@ -42,17 +72,24 @@ def promotion_create_view(request):
         error = validate_promotion(promo_code, discount_type, discount_value, start_date, end_date, usage_limit)
         if error:
             messages.error(request, error)
-        elif Promotion.objects.filter(promo_code=promo_code).exists():
-            messages.error(request, 'Kode promo sudah digunakan.')
         else:
-            Promotion.objects.create(
-                promo_code=promo_code,
-                discount_type=discount_type,
-                discount_value=discount_value,
-                start_date=start_date,
-                end_date=end_date,
-                usage_limit=usage_limit,
-            )
+            # Check if promo code already exists
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT 1 FROM promotion WHERE LOWER(promo_code) = LOWER(%s)",
+                    [promo_code]
+                )
+                if cursor.fetchone():
+                    messages.error(request, 'Kode promo sudah digunakan.')
+                    return render(request, 'promotions/promotion_form.html', {'action': 'create'})
+            
+            # Create promotion
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """INSERT INTO promotion (promo_code, discount_type, discount_value, start_date, end_date, usage_limit, usage_count)
+                       VALUES (%s, %s, %s, %s, %s, %s, 0)""",
+                    [promo_code, discount_type, discount_value, start_date, end_date, usage_limit]
+                )
             messages.success(request, 'Promosi berhasil dibuat.')
             return redirect('promotion_list')
     return render(request, 'promotions/promotion_form.html', {'action': 'create'})
@@ -62,7 +99,17 @@ def promotion_update_view(request, pk):
     if not can_admin(request.user):
         messages.error(request, 'Hanya admin yang dapat mengubah promosi.')
         return redirect('promotion_list')
-    promotion = get_object_or_404(Promotion, pk=pk)
+    
+    # Fetch promotion
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT * FROM promotion WHERE promotion_id = %s", [pk])
+        cols = [col[0] for col in cursor.description]
+        promo_row = cursor.fetchone()
+        if not promo_row:
+            messages.error(request, 'Promosi tidak ditemukan.')
+            return redirect('promotion_list')
+        promotion = dict(zip(cols, promo_row))
+    
     if request.method == 'POST':
         promo_code = request.POST.get('promo_code', '').strip().upper()
         discount_type = request.POST.get('discount_type', '')
@@ -73,18 +120,27 @@ def promotion_update_view(request, pk):
         error = validate_promotion(promo_code, discount_type, discount_value, start_date, end_date, usage_limit)
         if error:
             messages.error(request, error)
-        elif Promotion.objects.filter(promo_code=promo_code).exclude(pk=promotion.pk).exists():
-            messages.error(request, 'Kode promo sudah digunakan.')
         else:
-            promotion.promo_code = promo_code
-            promotion.discount_type = discount_type
-            promotion.discount_value = discount_value
-            promotion.start_date = start_date
-            promotion.end_date = end_date
-            promotion.usage_limit = usage_limit
-            promotion.save()
+            # Check if promo code already exists (excluding current)
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT 1 FROM promotion WHERE LOWER(promo_code) = LOWER(%s) AND promotion_id != %s",
+                    [promo_code, pk]
+                )
+                if cursor.fetchone():
+                    messages.error(request, 'Kode promo sudah digunakan.')
+                    return render(request, 'promotions/promotion_form.html', {'promotion': promotion, 'action': 'update'})
+            
+            # Update promotion
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """UPDATE promotion SET promo_code = %s, discount_type = %s, discount_value = %s, 
+                       start_date = %s, end_date = %s, usage_limit = %s WHERE promotion_id = %s""",
+                    [promo_code, discount_type, discount_value, start_date, end_date, usage_limit, pk]
+                )
             messages.success(request, 'Promosi berhasil diperbarui.')
             return redirect('promotion_list')
+    
     return render(request, 'promotions/promotion_form.html', {'promotion': promotion, 'action': 'update'})
 
 
@@ -92,11 +148,23 @@ def promotion_delete_view(request, pk):
     if not can_admin(request.user):
         messages.error(request, 'Hanya admin yang dapat menghapus promosi.')
         return redirect('promotion_list')
-    promotion = get_object_or_404(Promotion, pk=pk)
+    
+    # Fetch promotion
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT * FROM promotion WHERE promotion_id = %s", [pk])
+        cols = [col[0] for col in cursor.description]
+        promo_row = cursor.fetchone()
+        if not promo_row:
+            messages.error(request, 'Promosi tidak ditemukan.')
+            return redirect('promotion_list')
+        promotion = dict(zip(cols, promo_row))
+    
     if request.method == 'POST':
-        promotion.delete()
+        with connection.cursor() as cursor:
+            cursor.execute("DELETE FROM promotion WHERE promotion_id = %s", [pk])
         messages.success(request, 'Promosi berhasil dihapus.')
         return redirect('promotion_list')
+    
     return render(request, 'promotions/promotion_confirm_delete.html', {'promotion': promotion})
 
 
