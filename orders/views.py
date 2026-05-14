@@ -5,6 +5,10 @@ from django.contrib import messages
 from accounts.middleware import raw_sql_login_required
 from django.shortcuts import redirect, render
 from django.utils import timezone
+<<<<<<< HEAD
+from django.db import connection, transaction
+from .models import Order
+=======
 from django.db import connection
 
 
@@ -16,6 +20,17 @@ def _fmt_currency(amount):
     elif amount >= 1_000:
         return f"Rp {int(amount):,}".replace(",", ".")
     return f"Rp {int(amount)}"
+>>>>>>> ee5ea6c3b3069e2c62cafb1432b879eeac543b82
+
+
+def _pg_error_message(exc):
+    """Extract the primary message from a PostgreSQL trigger RAISE EXCEPTION."""
+    cause = getattr(exc, '__cause__', None)
+    if cause is not None:
+        diag = getattr(cause, 'diag', None)
+        if diag is not None and diag.message_primary:
+            return diag.message_primary
+    return str(exc).strip()
 
 
 def apply_discount(subtotal, promotion_data):
@@ -308,6 +323,49 @@ def order_create_view(request):
 
         order_id = str(uuid.uuid4())
         try:
+<<<<<<< HEAD
+            with transaction.atomic():
+                with connection.cursor() as cursor:
+                    # 1. Insert ORDER
+                    cursor.execute(
+                        """INSERT INTO "ORDER" (order_id, customer_id, total_amount, payment_status, order_date)
+                           VALUES (%s, %s, %s, %s, %s)""",
+                        [order_id, customer_id, total, 'Pending', timezone.now()]
+                    )
+
+                    # 2. Insert TICKETs (sebanyak quantity).
+                    # Trigger 5.2 fires here — exception rolls back ORDER + all tickets.
+                    first_ticket_id = None
+                    for _ in range(quantity):
+                        ticket_id = str(uuid.uuid4())
+                        ticket_code = f'TKT-{uuid.uuid4().hex[:10].upper()}'
+                        cursor.execute(
+                            """INSERT INTO ticket (ticket_id, ticket_code, category_id, order_id)
+                               VALUES (%s, %s, %s, %s)""",
+                            [ticket_id, ticket_code, category_id, order_id]
+                        )
+                        if first_ticket_id is None:
+                            first_ticket_id = ticket_id
+
+                    # 3. Assign seat to first ticket (jika seat dipilih)
+                    if seat_id and first_ticket_id:
+                        cursor.execute(
+                            "INSERT INTO has_relationship (ticket_id, seat_id) VALUES (%s, %s)",
+                            [first_ticket_id, seat_id]
+                        )
+
+                    # 4. Insert ORDER_PROMOTION (trigger No. 4 akan fire di sini)
+                    if promotion_id:
+                        cursor.execute(
+                            "INSERT INTO order_promotion (order_id, promotion_id) VALUES (%s, %s)",
+                            [order_id, promotion_id]
+                        )
+        except Exception as exc:
+            # Pesan error dari RAISE EXCEPTION di trigger akan muncul di sini.
+            # transaction.atomic() memastikan ORDER + semua tiket di-rollback jika ada error.
+            messages.error(request, _pg_error_message(exc))
+            return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
+=======
             with connection.cursor() as cursor:
                 cursor.execute(
                     """INSERT INTO "ORDER" (order_id, customer_id, total_amount, payment_status, order_date)
@@ -339,6 +397,7 @@ def order_create_view(request):
         except Exception as exc:
             messages.error(request, str(exc))
             return _render_create()
+>>>>>>> ee5ea6c3b3069e2c62cafb1432b879eeac543b82
 
         messages.success(request, f'Pesanan berhasil! {quantity} tiket telah dipesan.')
         return redirect('order_list')

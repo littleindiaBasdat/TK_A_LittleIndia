@@ -2,7 +2,17 @@ import uuid
 from django.contrib import messages
 from accounts.middleware import raw_sql_login_required
 from django.shortcuts import redirect, render
-from django.db import connection
+from django.db import connection, transaction
+
+
+def _pg_error_message(exc):
+    """Extract the primary message from a PostgreSQL trigger RAISE EXCEPTION."""
+    cause = getattr(exc, '__cause__', None)
+    if cause is not None:
+        diag = getattr(cause, 'diag', None)
+        if diag is not None and diag.message_primary:
+            return diag.message_primary
+    return str(exc).strip()
 
 
 def can_create(user):
@@ -291,6 +301,32 @@ def ticket_create_view(request):
             # TODO: Abid (Trigger 5.2) - validasi kuota kategori tiket (tickets_sold >= quota)
             # akan di-handle oleh trigger BEFORE INSERT ON ticket. Pesan error trigger
             # akan ditangkap oleh try/except di bawah ini.
+            # FK existence checks — dilakukan di luar transaksi agar UX cepat.
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT order_id FROM "ORDER" WHERE order_id = %s', [order_id])
+                if not cursor.fetchone():
+                    messages.error(request, 'Order tidak ditemukan.')
+                    return render(request, 'tickets/ticket_form.html', {
+                        'orders': orders, 'categories': categories, 'seats': seats, 'action': 'create',
+                    })
+
+                cursor.execute("SELECT category_id FROM ticket_category WHERE category_id = %s", [category_id])
+                if not cursor.fetchone():
+                    messages.error(request, 'Kategori tiket tidak valid.')
+                    return render(request, 'tickets/ticket_form.html', {
+                        'orders': orders, 'categories': categories, 'seats': seats, 'action': 'create',
+                    })
+
+                if seat_id:
+                    cursor.execute("SELECT seat_id FROM seat WHERE seat_id = %s", [seat_id])
+                    if not cursor.fetchone():
+                        messages.error(request, 'Seat tidak valid.')
+                        return render(request, 'tickets/ticket_form.html', {
+                            'orders': orders, 'categories': categories, 'seats': seats, 'action': 'create',
+                        })
+
+            # INSERT ticket + has_relationship dalam satu transaksi atomik.
+            # Trigger 5.2 fires pada INSERT ticket — exception rolls back has_relationship juga.
             try:
                 with connection.cursor() as cursor:
                     # Basic FK existence check (cepat di Python untuk UX yang ramah).
@@ -378,11 +414,18 @@ def ticket_create_view(request):
 
                     if seat_id:
                         cursor.execute(
-                            "INSERT INTO has_relationship (ticket_id, seat_id) VALUES (%s, %s)",
-                            [ticket_id, seat_id]
+                            """INSERT INTO ticket (ticket_id, ticket_code, category_id, order_id)
+                               VALUES (%s, %s, %s, %s)""",
+                            [ticket_id, code, category_id, order_id]
                         )
+
+                        if seat_id:
+                            cursor.execute(
+                                "INSERT INTO has_relationship (ticket_id, seat_id) VALUES (%s, %s)",
+                                [ticket_id, seat_id]
+                            )
             except Exception as exc:
-                messages.error(request, str(exc))
+                messages.error(request, _pg_error_message(exc))
                 return render(request, 'tickets/ticket_form.html', {
                     'orders': orders, 'categories': categories, 'seats': seats, 'action': 'create',
                 })

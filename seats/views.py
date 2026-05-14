@@ -4,6 +4,16 @@ from django.shortcuts import redirect, render
 from django.db import connection
 
 
+def _pg_error_message(exc):
+    """Extract the primary message from a PostgreSQL trigger RAISE EXCEPTION."""
+    cause = getattr(exc, '__cause__', None)
+    if cause is not None:
+        diag = getattr(cause, 'diag', None)
+        if diag is not None and diag.message_primary:
+            return diag.message_primary
+    return str(exc).strip()
+
+
 def can_manage(user):
     return user.is_authenticated and user.role in ['admin', 'organizer']
 
@@ -226,7 +236,7 @@ def seat_delete_view(request, pk):
             with connection.cursor() as cursor:
                 cursor.execute("DELETE FROM seat WHERE seat_id = %s", [pk])
         except Exception as exc:
-            messages.error(request, str(exc))
+            messages.error(request, _pg_error_message(exc))
             return redirect('seat_list')
         messages.success(request, 'Kursi berhasil dihapus.')
         return redirect('seat_list')
