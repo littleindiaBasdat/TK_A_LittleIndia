@@ -213,76 +213,183 @@ def dashboard_view(request):
         user_id = user_data[0] if user_data else user.id
 
     user_role = get_user_role(user_id)
+    profile = {}
+    stats = []
 
     with connection.cursor() as cursor:
         if user_role == 'customer':
             cursor.execute(
-                """SELECT COUNT(*) FROM ticket WHERE order_id IN 
-                   (SELECT o.order_id FROM \"ORDER\" o
+                "SELECT customer_id, full_name, phone_number FROM customer WHERE user_id = %s",
+                [user_id]
+            )
+            row = cursor.fetchone()
+            if row:
+                profile = {
+                    'id_label': 'Customer ID',
+                    'id_value': row[0],
+                    'name_label': 'Nama Lengkap',
+                    'name_value': row[1],
+                    'extra_label': 'Nomor Telepon',
+                    'extra_value': row[2] or '-',
+                }
+
+            cursor.execute(
+                """SELECT COUNT(*) FROM ticket WHERE order_id IN
+                   (SELECT o.order_id FROM "ORDER" o
                     JOIN customer c ON o.customer_id = c.customer_id
                     WHERE c.user_id = %s)""",
                 [user_id]
             )
-            tickets_count = cursor.fetchone()[0]
+            my_tickets = cursor.fetchone()[0]
 
             cursor.execute(
                 """SELECT COUNT(*) FROM "ORDER"
                    WHERE customer_id IN (SELECT customer_id FROM customer WHERE user_id = %s)""",
                 [user_id]
             )
-            orders_count = cursor.fetchone()[0]
+            my_orders = cursor.fetchone()[0]
 
-            cursor.execute("SELECT COUNT(*) FROM event")
-            events_count = cursor.fetchone()[0]
+            cursor.execute(
+                """SELECT COUNT(*) FROM "ORDER"
+                   WHERE customer_id IN (SELECT customer_id FROM customer WHERE user_id = %s)
+                     AND payment_status = 'Pending'""",
+                [user_id]
+            )
+            pending_orders = cursor.fetchone()[0]
+
+            cursor.execute(
+                """SELECT COALESCE(SUM(total_amount), 0) FROM "ORDER"
+                   WHERE customer_id IN (SELECT customer_id FROM customer WHERE user_id = %s)
+                     AND payment_status = 'Lunas'""",
+                [user_id]
+            )
+            total_spent = cursor.fetchone()[0]
+
+            stats = [
+                ('Tiket Saya', my_tickets),
+                ('Total Pesanan', my_orders),
+                ('Pending', pending_orders),
+                ('Total Pengeluaran (Lunas)', f'Rp{total_spent}'),
+            ]
 
         elif user_role == 'organizer':
             cursor.execute(
-                """SELECT COUNT(*) FROM ticket WHERE order_id IN
-                   (SELECT DISTINCT t.order_id FROM ticket t 
-                    JOIN ticket_category tc ON t.category_id = tc.category_id
-                    WHERE tc.event_id IN
-                     (SELECT e.event_id FROM event e WHERE e.organizer_id IN
-                      (SELECT organizer_id FROM organizer WHERE user_id = %s)))""",
+                "SELECT organizer_id, organizer_name, contact_email FROM organizer WHERE user_id = %s",
                 [user_id]
             )
-            tickets_count = cursor.fetchone()[0]
-
-            cursor.execute(
-                """SELECT COUNT(*) FROM "ORDER" WHERE order_id IN
-                   (SELECT DISTINCT t.order_id FROM ticket t
-                    JOIN ticket_category tc ON t.category_id = tc.category_id
-                    WHERE tc.event_id IN
-                     (SELECT e.event_id FROM event e WHERE e.organizer_id IN
-                      (SELECT organizer_id FROM organizer WHERE user_id = %s)))""",
-                [user_id]
-            )
-            orders_count = cursor.fetchone()[0]
+            row = cursor.fetchone()
+            if row:
+                profile = {
+                    'id_label': 'Organizer ID',
+                    'id_value': row[0],
+                    'name_label': 'Nama Organizer',
+                    'name_value': row[1],
+                    'extra_label': 'Email Kontak',
+                    'extra_value': row[2] or '-',
+                }
 
             cursor.execute(
                 """SELECT COUNT(*) FROM event
                    WHERE organizer_id IN (SELECT organizer_id FROM organizer WHERE user_id = %s)""",
                 [user_id]
             )
-            events_count = cursor.fetchone()[0]
+            my_events = cursor.fetchone()[0]
+
+            cursor.execute(
+                """SELECT COUNT(DISTINCT o.order_id) FROM "ORDER" o
+                   JOIN ticket t ON o.order_id = t.order_id
+                   JOIN ticket_category tc ON t.category_id = tc.category_id
+                   WHERE tc.event_id IN
+                    (SELECT e.event_id FROM event e
+                     WHERE e.organizer_id IN
+                      (SELECT organizer_id FROM organizer WHERE user_id = %s))""",
+                [user_id]
+            )
+            event_orders = cursor.fetchone()[0]
+
+            cursor.execute(
+                """SELECT COUNT(*) FROM ticket t
+                   JOIN ticket_category tc ON t.category_id = tc.category_id
+                   WHERE tc.event_id IN
+                    (SELECT e.event_id FROM event e
+                     WHERE e.organizer_id IN
+                      (SELECT organizer_id FROM organizer WHERE user_id = %s))""",
+                [user_id]
+            )
+            event_tickets = cursor.fetchone()[0]
+
+            cursor.execute(
+                """SELECT COALESCE(SUM(o.total_amount), 0) FROM "ORDER" o
+                   WHERE o.payment_status = 'Lunas' AND o.order_id IN
+                    (SELECT DISTINCT t.order_id FROM ticket t
+                     JOIN ticket_category tc ON t.category_id = tc.category_id
+                     WHERE tc.event_id IN
+                      (SELECT e.event_id FROM event e
+                       WHERE e.organizer_id IN
+                        (SELECT organizer_id FROM organizer WHERE user_id = %s)))""",
+                [user_id]
+            )
+            event_revenue = cursor.fetchone()[0]
+
+            stats = [
+                ('Event Saya', my_events),
+                ('Order Event', event_orders),
+                ('Tiket Terjual', event_tickets),
+                ('Revenue (Lunas)', f'Rp{event_revenue}'),
+            ]
 
         else:  # admin
-            cursor.execute("SELECT COUNT(*) FROM ticket")
-            tickets_count = cursor.fetchone()[0]
+            profile = {
+                'id_label': 'User ID',
+                'id_value': user_id,
+                'name_label': 'Role',
+                'name_value': 'Administrator',
+                'extra_label': 'Status',
+                'extra_value': 'Aktif',
+            }
 
-            cursor.execute('SELECT COUNT(*) FROM "ORDER"')
-            orders_count = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM user_account")
+            total_users = cursor.fetchone()[0]
+
+            cursor.execute("SELECT COUNT(*) FROM customer")
+            total_customers = cursor.fetchone()[0]
+
+            cursor.execute("SELECT COUNT(*) FROM organizer")
+            total_organizers = cursor.fetchone()[0]
 
             cursor.execute("SELECT COUNT(*) FROM event")
-            events_count = cursor.fetchone()[0]
+            total_events = cursor.fetchone()[0]
 
-        cursor.execute("SELECT COUNT(*) FROM seat")
-        seats_count = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM venue")
+            total_venues = cursor.fetchone()[0]
+
+            cursor.execute('SELECT COUNT(*) FROM "ORDER"')
+            total_orders = cursor.fetchone()[0]
+
+            cursor.execute("SELECT COUNT(*) FROM ticket")
+            total_tickets = cursor.fetchone()[0]
+
+            cursor.execute(
+                """SELECT COALESCE(SUM(total_amount), 0) FROM "ORDER"
+                   WHERE payment_status = 'Lunas'"""
+            )
+            total_revenue = cursor.fetchone()[0]
+
+            stats = [
+                ('Total User', total_users),
+                ('Customer', total_customers),
+                ('Organizer', total_organizers),
+                ('Total Event', total_events),
+                ('Total Venue', total_venues),
+                ('Total Order', total_orders),
+                ('Total Tiket', total_tickets),
+                ('Revenue (Lunas)', f'Rp{total_revenue}'),
+            ]
 
     return render(request, 'accounts/dashboard.html', {
-        'tickets_count': tickets_count,
-        'orders_count': orders_count,
-        'events_count': events_count,
-        'seats_count': seats_count,
+        'profile': profile,
+        'stats': stats,
+        'user_role': user_role,
     })
 
 

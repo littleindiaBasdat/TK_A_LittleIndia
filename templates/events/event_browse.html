@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Cari Event | TikTakTuk{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>Jelajahi Acara</h1>
+        <p>Cari dan beli tiket acara TikTakTuk.</p>
+    </div>
+</section>
+<form class="filters" method="get">
+    <input name="q" value="{{ query }}" placeholder="Cari judul acara atau nama artist">
+    <select name="venue">
+        <option value="">Semua Venue</option>
+        {% for v in venues %}
+            <option value="{{ v.id }}" {% if venue_filter == v.id|stringformat:"s" %}selected{% endif %}>{{ v.name }}</option>
+        {% endfor %}
+    </select>
+    <select name="artist">
+        <option value="">Semua Artist</option>
+        {% for a in artists %}
+            <option value="{{ a.id }}" {% if artist_filter == a.id|stringformat:"s" %}selected{% endif %}>{{ a.name }}</option>
+        {% endfor %}
+    </select>
+    <button class="primary" type="submit">Filter</button>
+</form>
+<section class="grid">
+    {% for event in events %}
+        <article class="card">
+            <div>
+                <h2>{{ event.event_title }}</h2>
+                <div class="meta">
+                    <span>Tanggal &amp; Waktu: {{ event.event_datetime|date:"d M Y H:i" }}</span>
+                    <span>Venue: {{ event.venue_name|default:"-" }}{% if event.city %}, {{ event.city }}{% endif %}</span>
+                    <span>Artist:
+                        {% for artist in event.artists %}
+                            {{ artist.name }}{% if not forloop.last %}, {% endif %}
+                        {% empty %}-{% endfor %}
+                    </span>
+                    <span>Kategori Tiket:
+                        {% for cat in event.categories %}
+                            {{ cat.name }}{% if not forloop.last %}, {% endif %}
+                        {% empty %}-{% endfor %}
+                    </span>
+                    <span>Harga Mulai: {% if event.min_price %}Rp{{ event.min_price }}{% else %}-{% endif %}</span>
+                </div>
+            </div>
+            {% if can_buy %}
+                <div class="actions">
+                    <a class="button primary" href="{% url 'order_create' %}?event={{ event.event_id }}">Beli Tiket</a>
+                </div>
+            {% endif %}
+        </article>
+    {% empty %}
+        <div class="panel">Belum ada event yang sesuai.</div>
+    {% endfor %}
+</section>
+{% endblock %}

@@ -2,21 +2,28 @@
 {% block title %}{% if action == "update" %}Update Order{% else %}Buat Order{% endif %} | TikTakTuk{% endblock %}
 {% block content %}
 <section class="panel">
-    <h1>{% if action == "update" %}Update Order{% else %}Buat Order{% endif %}</h1>
+    <h1>{% if action == "update" %}Update Order{% elif selected_event %}Checkout - {{ selected_event.event_title }}{% else %}Buat Order{% endif %}</h1>
+    {% if selected_event and action != "update" %}
+        <div class="meta" style="margin-bottom:18px;">
+            <span>Event: <strong>{{ selected_event.event_title }}</strong></span>
+            <span>Tanggal &amp; Waktu: {{ selected_event.event_datetime|date:"d M Y H:i" }}</span>
+            <span>Venue: {{ selected_event.venue_name|default:"-" }}{% if selected_event.city %}, {{ selected_event.city }}{% endif %}</span>
+        </div>
+    {% endif %}
     <form class="stack" method="post">
         {% csrf_token %}
         {% if action == "update" %}
             <div class="meta">
-                <span>Order ID: {{ order.id }}</span>
-                <span>Customer: {{ order.customer.display_name }}</span>
-                <span>Event: {{ order.event.title }}</span>
+                <span>Order ID: {{ order.order_id }}</span>
+                <span>Customer: {{ order.customer_name|default:"-" }}</span>
+                <span>Event: {{ order.event_name|default:"-" }}</span>
                 <span>Total: Rp{{ order.total_amount }}</span>
             </div>
             <label>Status Pembayaran
                 <select name="payment_status" required>
-                    <option value="paid" {% if order.payment_status == "paid" %}selected{% endif %}>Lunas</option>
-                    <option value="pending" {% if order.payment_status == "pending" %}selected{% endif %}>Pending</option>
-                    <option value="cancelled" {% if order.payment_status == "cancelled" %}selected{% endif %}>Dibatalkan</option>
+                    <option value="Lunas" {% if order.payment_status == "Lunas" %}selected{% endif %}>Lunas</option>
+                    <option value="Pending" {% if order.payment_status == "Pending" %}selected{% endif %}>Pending</option>
+                    <option value="Dibatalkan" {% if order.payment_status == "Dibatalkan" %}selected{% endif %}>Dibatalkan</option>
                 </select>
             </label>
         {% else %}
@@ -30,6 +37,16 @@
             </label>
             <label>Jumlah Tiket
                 <input type="number" name="quantity" min="1" max="10" value="1" required>
+            </label>
+            <label>Pilih Kursi (Opsional)
+                <select name="seat">
+                    <option value="">Tanpa Kursi (Free seating)</option>
+                    {% for seat in seats %}
+                        <option value="{{ seat.seat_id }}">
+                            {{ seat.venue_name }} - {{ seat.section }} Baris {{ seat.row_number }} No. {{ seat.seat_number }}
+                        </option>
+                    {% endfor %}
+                </select>
             </label>
             <label>Kode Promo
                 <input name="promo_code" list="promo-options" placeholder="Opsional">

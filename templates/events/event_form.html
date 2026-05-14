@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}{% if action == "create" %}Buat Acara{% else %}Edit Acara{% endif %} | TikTakTuk{% endblock %}
+{% block content %}
+<section class="panel">
+    <h1>{% if action == "create" %}Buat Acara{% else %}Edit Acara{% endif %}</h1>
+    <form class="stack" method="post">
+        {% csrf_token %}
+        <label>Judul Acara
+            <input name="event_title" value="{{ event.event_title|default:'' }}" required>
+        </label>
+        <label>Tanggal &amp; Waktu Acara
+            <input type="datetime-local" name="event_datetime"
+                   value="{{ event.event_datetime|date:'Y-m-d\TH:i' }}" required>
+        </label>
+        <label>Venue
+            <select name="venue" required>
+                <option value="">Pilih venue</option>
+                {% for v in venues %}
+                    <option value="{{ v.venue_id }}" {% if event.venue_id == v.venue_id %}selected{% endif %}>
+                        {{ v.venue_name }} - {{ v.city }}
+                    </option>
+                {% endfor %}
+            </select>
+        </label>
+        {% if user.role == "admin" %}
+            <label>Organizer
+                <select name="organizer" required>
+                    <option value="">Pilih organizer</option>
+                    {% for o in organizers %}
+                        <option value="{{ o.organizer_id }}" {% if event.organizer_id == o.organizer_id %}selected{% endif %}>
+                            {{ o.organizer_name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </label>
+        {% endif %}
+        <label>Artist/Performer (boleh lebih dari satu, Ctrl+klik)
+            <select name="artists" multiple size="6">
+                {% for a in artists %}
+                    <option value="{{ a.artist_id }}"
+                        {% if a.artist_id|stringformat:"s" in existing_artist_ids %}selected{% endif %}>
+                        {{ a.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </label>
+        <div class="actions">
+            <button class="primary" type="submit">{% if action == "create" %}Buat Acara{% else %}Simpan{% endif %}</button>
+            <a class="button secondary" href="{% url 'event_list' %}">Batal</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

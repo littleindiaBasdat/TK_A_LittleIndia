@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{% if action == "create" %}Tambah Venue{% else %}Edit Venue{% endif %} | TikTakTuk{% endblock %}
+{% block content %}
+<section class="panel">
+    <h1>{% if action == "create" %}Tambah Venue{% else %}Edit Venue{% endif %}</h1>
+    <form class="stack" method="post">
+        {% csrf_token %}
+        <label>Nama Venue
+            <input name="venue_name" value="{{ venue.venue_name|default:'' }}" required>
+        </label>
+        <label>Alamat
+            <textarea name="address" required>{{ venue.address|default:'' }}</textarea>
+        </label>
+        <label>Kota
+            <input name="city" value="{{ venue.city|default:'' }}" required>
+        </label>
+        <label>Kapasitas
+            <input type="number" min="1" name="capacity" value="{{ venue.capacity|default:'' }}" required>
+        </label>
+        <div class="actions">
+            <button class="primary" type="submit">{% if action == "create" %}Tambah{% else %}Simpan{% endif %}</button>
+            <a class="button secondary" href="{% url 'venue_list' %}">Batal</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

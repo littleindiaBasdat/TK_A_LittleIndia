@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Event Saya | TikTakTuk{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>{% if user.role == "admin" %}Manajemen Event{% else %}Event Saya{% endif %}</h1>
+        <p>Daftar acara yang Anda kelola.</p>
+    </div>
+    <a class="button primary" href="{% url 'event_create' %}">Buat Acara</a>
+</section>
+<section class="grid">
+    {% for event in events %}
+        <article class="card">
+            <div>
+                <h2>{{ event.event_title }}</h2>
+                <div class="meta">
+                    <span>Event ID: {{ event.event_id }}</span>
+                    <span>Tanggal &amp; Waktu: {{ event.event_datetime|date:"d M Y H:i" }}</span>
+                    <span>Venue: {{ event.venue_name|default:"-" }}{% if event.city %}, {{ event.city }}{% endif %}</span>
+                    <span>Organizer: {{ event.organizer_name|default:"-" }}</span>
+                    <span>Artist:
+                        {% for artist in event.artists %}
+                            {{ artist.name }}{% if not forloop.last %}, {% endif %}
+                        {% empty %}-{% endfor %}
+                    </span>
+                    <span>Kategori Tiket:
+                        {% for cat in event.categories %}
+                            {{ cat.name }} (Rp{{ cat.price }}){% if not forloop.last %}, {% endif %}
+                        {% empty %}-{% endfor %}
+                    </span>
+                </div>
+            </div>
+            <div class="actions">
+                <a class="button secondary" href="{% url 'event_update' event.event_id %}">Edit Acara</a>
+            </div>
+        </article>
+    {% empty %}
+        <div class="panel">Belum ada event yang Anda kelola.</div>
+    {% endfor %}
+</section>
+{% endblock %}

@@ -31,6 +31,8 @@ def scoped_tickets(user):
 
 def category_scope(user):
     """Returns SQL WHERE clause and params for category scoping"""
+    if not getattr(user, 'is_authenticated', False):
+        return "", []
     user_id = str(user.id)
     user_role = user.role
 
@@ -41,6 +43,8 @@ def category_scope(user):
 
 def event_scope(user):
     """Returns SQL WHERE clause and params for event scoping"""
+    if not getattr(user, 'is_authenticated', False):
+        return "", []
     user_id = str(user.id)
     user_role = user.role
 
@@ -136,10 +140,11 @@ def ticket_create_view(request):
         return redirect('ticket_list')
 
     # Get orders with event info via ticket_category
+    # NOTE: order yang belum punya tiket -> event_title NULL. Itu OK, ditampilkan "-"
     orders_sql = """
         SELECT DISTINCT o.order_id, o.order_date, o.payment_status, o.total_amount,
                c.full_name AS customer_name,
-               e.event_id, e.event_title
+               COALESCE(e.event_title, '-') AS event_title
         FROM "ORDER" o
         LEFT JOIN customer c ON o.customer_id = c.customer_id
         LEFT JOIN ticket t ON o.order_id = t.order_id
@@ -346,7 +351,6 @@ def ticket_delete_view(request, pk):
 # TICKET CATEGORY VIEWS
 # ============================================================
 
-@raw_sql_login_required
 def ticket_category_list_view(request):
     query = request.GET.get('q', '').strip()
     event_filter = request.GET.get('event', '').strip()
@@ -373,6 +377,8 @@ def ticket_category_list_view(request):
     if event_filter:
         sql += " AND tc.event_id = %s"
         params.append(event_filter)
+
+    sql += " ORDER BY e.event_title ASC, tc.category_name ASC"
 
     with connection.cursor() as cursor:
         cursor.execute(sql, params)

@@ -5,6 +5,7 @@ from accounts.middleware import raw_sql_login_required
 import uuid
 
 
+@raw_sql_login_required
 def artist_list_view(request):
     query = request.GET.get('q', '').strip()
     genre_filter = request.GET.get('genre', '').strip()

@@ -24,6 +24,7 @@
 <table>
     <thead>
         <tr>
+            <th>Category ID</th>
             <th>Category Name</th>
             <th>Quota</th>
             <th>Price</th>
@@ -35,6 +36,7 @@
     <tbody>
         {% for category in categories %}
             <tr>
+                <td>{{ category.category_id }}</td>
                 <td>{{ category.category_name }}</td>
                 <td>{{ category.quota }}</td>
                 <td>Rp{{ category.price }}</td>

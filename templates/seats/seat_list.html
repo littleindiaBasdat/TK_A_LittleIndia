@@ -62,7 +62,8 @@
                         <div class="actions">
                             <a class="button secondary" href="{% url 'seat_update' seat.seat_id %}">Update</a>
                             {% if seat.is_filled %}
-                                <span class="button secondary">Delete</span>
+                                <span class="button secondary" title="Kursi ini sudah di-assign ke tiket dan tidak dapat dihapus. Hapus atau ubah tiket terlebih dahulu." style="opacity:.55;cursor:not-allowed;">Delete</span>
+                                <small style="color:#b42318;">Kursi ini sudah di-assign ke tiket dan tidak dapat dihapus. Hapus atau ubah tiket terlebih dahulu.</small>
                             {% else %}
                                 <a class="button danger" href="{% url 'seat_delete' seat.seat_id %}">Delete</a>
                             {% endif %}

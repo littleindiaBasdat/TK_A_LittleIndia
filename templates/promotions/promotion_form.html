@@ -10,8 +10,8 @@
         </label>
         <label>Tipe Diskon
             <select name="discount_type" required>
-                <option value="percent" {% if promotion.discount_type == "percent" %}selected{% endif %}>Persentase</option>
-                <option value="nominal" {% if promotion.discount_type == "nominal" %}selected{% endif %}>Nominal</option>
+                <option value="PERCENTAGE" {% if promotion.discount_type == "PERCENTAGE" %}selected{% endif %}>Persentase</option>
+                <option value="NOMINAL" {% if promotion.discount_type == "NOMINAL" %}selected{% endif %}>Nominal</option>
             </select>
         </label>
         <label>Nilai Diskon

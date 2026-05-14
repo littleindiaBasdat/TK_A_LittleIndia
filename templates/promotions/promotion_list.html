@@ -19,8 +19,8 @@
     <input name="q" value="{{ query }}" placeholder="Cari kode promo">
     <select name="type">
         <option value="">Semua Tipe</option>
-        <option value="percent" {% if discount_filter == "percent" %}selected{% endif %}>Persentase</option>
-        <option value="nominal" {% if discount_filter == "nominal" %}selected{% endif %}>Nominal</option>
+        <option value="PERCENTAGE" {% if discount_filter == "PERCENTAGE" %}selected{% endif %}>Persentase</option>
+        <option value="NOMINAL" {% if discount_filter == "NOMINAL" %}selected{% endif %}>Nominal</option>
     </select>
     <button class="primary" type="submit">Filter</button>
 </form>
@@ -28,7 +28,8 @@
     <thead>
         <tr>
             <th>Kode Promo</th>
-            <th>Persentase / Nominal</th>
+            <th>Tipe Diskon</th>
+            <th>Nilai Diskon</th>
             <th>Tanggal Mulai</th>
             <th>Tanggal Berakhir</th>
             <th>Penggunaan</th>
@@ -39,6 +40,7 @@
         {% for promotion in promotions %}
             <tr>
                 <td>{{ promotion.promo_code }}</td>
+                <td>{% if promotion.discount_type == "PERCENTAGE" %}Persentase{% else %}Nominal{% endif %}</td>
                 <td>{% if promotion.discount_type == "PERCENTAGE" %}{{ promotion.discount_value }}%{% else %}Rp{{ promotion.discount_value }}{% endif %}</td>
                 <td>{{ promotion.start_date }}</td>
                 <td>{{ promotion.end_date }}</td>

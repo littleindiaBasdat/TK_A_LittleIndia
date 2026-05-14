@@ -3,7 +3,7 @@
 {% block content %}
 <section class="panel">
     <h1>Delete Artist</h1>
-    <p>Artist ID: {{ artist.id }}</p>
+    <p>Artist ID: {{ artist.artist_id }}</p>
     <p>Name: {{ artist.name }}</p>
     <form class="actions" method="post">
         {% csrf_token %}

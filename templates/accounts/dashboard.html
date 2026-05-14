@@ -3,35 +3,30 @@
 {% block content %}
 <section class="page-head">
     <div>
-        <h1>Dashboard</h1>
-        <p>Profil dan ringkasan aktivitas pengguna.</p>
+        <h1>Dashboard {% if user_role == "admin" %}Admin{% elif user_role == "organizer" %}Organizer{% else %}Customer{% endif %}</h1>
+        <p>Profil dan ringkasan aktivitas Anda di TikTakTuk.</p>
     </div>
     <div class="actions">
         <a class="button secondary" href="{% url 'profile_edit' %}">Edit Profil</a>
         <a class="button secondary" href="{% url 'password_update' %}">Update Password</a>
+        <a class="button secondary" href="{% url 'logout' %}">Logout</a>
     </div>
 </section>
+
 <section class="stats">
-    <div class="stat"><span>Tiket</span><strong>{{ tickets_count }}</strong></div>
-    <div class="stat"><span>Order</span><strong>{{ orders_count }}</strong></div>
-    <div class="stat"><span>Event</span><strong>{{ events_count }}</strong></div>
-    <div class="stat"><span>Kursi</span><strong>{{ seats_count }}</strong></div>
+    {% for label, value in stats %}
+        <div class="stat"><span>{{ label }}</span><strong>{{ value }}</strong></div>
+    {% endfor %}
 </section>
+
 <section class="panel">
-    <div class="grid">
-        <div>
-            <h2>Informasi Akun</h2>
-            <div class="meta">
-                <span>Username: {{ user.username }}</span>
-                <span>Role: {{ user.get_role_display }}</span>
-                <span>Nama: {{ user.display_name }}</span>
-                {% if user.role == "customer" %}
-                    <span>Nomor Telepon: {{ user.phone|default:"-" }}</span>
-                {% elif user.role == "organizer" %}
-                    <span>Email Kontak: {{ user.contact_email|default:"-" }}</span>
-                {% endif %}
-            </div>
-        </div>
+    <h2>Informasi Akun</h2>
+    <div class="meta">
+        <span>Username: {{ user.username }}</span>
+        <span>Role: {{ user_role|title }}</span>
+        {% if profile.id_label %}<span>{{ profile.id_label }}: {{ profile.id_value }}</span>{% endif %}
+        {% if profile.name_label %}<span>{{ profile.name_label }}: {{ profile.name_value }}</span>{% endif %}
+        {% if profile.extra_label %}<span>{{ profile.extra_label }}: {{ profile.extra_value }}</span>{% endif %}
     </div>
 </section>
 {% endblock %}

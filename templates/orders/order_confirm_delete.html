@@ -3,7 +3,7 @@
 {% block content %}
 <section class="panel">
     <h1>Delete Order</h1>
-    <p>Anda yakin ingin menghapus order {{ order.id }}?</p>
+    <p>Anda yakin ingin menghapus order {{ order.order_id }}?</p>
     <form class="actions" method="post">
         {% csrf_token %}
         <button class="danger" type="submit">Hapus</button>

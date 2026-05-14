@@ -20,9 +20,9 @@
     <input name="q" value="{{ query }}" placeholder="Cari Order ID, event, atau customer">
     <select name="status">
         <option value="">Semua Status</option>
-        <option value="paid" {% if status_filter == "paid" %}selected{% endif %}>Lunas</option>
-        <option value="pending" {% if status_filter == "pending" %}selected{% endif %}>Pending</option>
-        <option value="cancelled" {% if status_filter == "cancelled" %}selected{% endif %}>Dibatalkan</option>
+        <option value="Lunas" {% if status_filter == "Lunas" %}selected{% endif %}>Lunas</option>
+        <option value="Pending" {% if status_filter == "Pending" %}selected{% endif %}>Pending</option>
+        <option value="Dibatalkan" {% if status_filter == "Dibatalkan" %}selected{% endif %}>Dibatalkan</option>
     </select>
     <button class="primary" type="submit">Filter</button>
 </form>

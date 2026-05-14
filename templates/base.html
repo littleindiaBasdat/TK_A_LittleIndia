@@ -138,39 +138,38 @@
         <a class="brand" href="{% url 'dashboard' %}">TikTakTuk</a>
         <nav class="nav">
             {% if user.is_authenticated %}
-                <a href="{% url 'dashboard' %}">Dashboard</a>
                 {% if user.role == 'admin' %}
-                    <a href="{% url 'order_list' %}">Semua Order</a>
-                    <a href="{% url 'promotion_list' %}">Promosi</a>
-                    <a href="{% url 'artist_list' %}">Artis</a>
+                    <a href="{% url 'dashboard' %}">Dashboard</a>
+                    <a href="{% url 'venue_list' %}">Manajemen Venue</a>
+                    <a href="{% url 'seat_list' %}">Manajemen Kursi</a>
                     <a href="{% url 'ticket_category_list' %}">Kategori Tiket</a>
                     <a href="{% url 'ticket_list' %}">Manajemen Tiket</a>
-                    <a href="{% url 'seat_list' %}">Manajemen Kursi</a>
+                    <a href="{% url 'order_list' %}">Semua Order</a>
+                    <a href="{% url 'artist_list' %}">Artis</a>
+                    <a href="{% url 'promotion_list' %}">Promosi</a>
                     <a href="{% url 'dashboard' %}">Profile</a>
                 {% elif user.role == 'organizer' %}
-                    <a href="{% url 'order_list' %}">Semua Order</a>
-                    <a href="{% url 'promotion_list' %}">Promosi</a>
-                    <a href="{% url 'artist_list' %}">Artis</a>
+                    <a href="{% url 'dashboard' %}">Dashboard</a>
+                    <a href="{% url 'event_list' %}">Event Saya</a>
+                    <a href="{% url 'venue_list' %}">Manajemen Venue</a>
+                    <a href="{% url 'seat_list' %}">Manajemen Kursi</a>
                     <a href="{% url 'ticket_category_list' %}">Kategori Tiket</a>
                     <a href="{% url 'ticket_list' %}">Manajemen Tiket</a>
-                    <a href="{% url 'seat_list' %}">Manajemen Kursi</a>
+                    <a href="{% url 'order_list' %}">Semua Order</a>
                     <a href="{% url 'dashboard' %}">Profile</a>
                 {% else %}
+                    <a href="{% url 'dashboard' %}">Dashboard</a>
                     <a href="{% url 'ticket_list' %}">Tiket Saya</a>
                     <a href="{% url 'order_list' %}">Pesanan</a>
+                    <a href="{% url 'event_browse' %}">Cari Event</a>
                     <a href="{% url 'promotion_list' %}">Promosi</a>
+                    <a href="{% url 'venue_list' %}">Venue</a>
                     <a href="{% url 'artist_list' %}">Artis</a>
-                    <a href="{% url 'ticket_category_list' %}">Kategori Tiket</a>
-                    <a href="{% url 'seat_list' %}">Kursi</a>
-                    <a href="{% url 'dashboard' %}">Profile</a>
                 {% endif %}
                 <a href="{% url 'logout' %}">Logout</a>
             {% else %}
                 <a href="{% url 'login' %}">Login</a>
                 <a href="{% url 'register' %}">Registrasi</a>
-                <a href="{% url 'promotion_list' %}">Promosi</a>
-                <a href="{% url 'artist_list' %}">Artis</a>
-                <a href="{% url 'ticket_category_list' %}">Kategori Tiket</a>
             {% endif %}
         </nav>
     </header>

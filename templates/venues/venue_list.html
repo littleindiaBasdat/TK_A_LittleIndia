@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Venue | TikTakTuk{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>{% if can_manage %}Manajemen Venue{% else %}Daftar Venue{% endif %}</h1>
+        <p>Daftar venue beserta kapasitas dan lokasinya.</p>
+    </div>
+    {% if can_manage %}
+        <a class="button primary" href="{% url 'venue_create' %}">Tambah Venue</a>
+    {% endif %}
+</section>
+<form class="filters" method="get">
+    <input name="q" value="{{ query }}" placeholder="Cari nama atau alamat venue">
+    <select name="city">
+        <option value="">Semua Kota</option>
+        {% for city in cities %}
+            <option value="{{ city }}" {% if city_filter == city %}selected{% endif %}>{{ city }}</option>
+        {% endfor %}
+    </select>
+    <button class="primary" type="submit">Filter</button>
+</form>
+<section class="grid">
+    {% for venue in venues %}
+        <article class="card">
+            <div>
+                <h2>{{ venue.venue_name }}</h2>
+                <div class="meta">
+                    <span>Venue ID: {{ venue.venue_id }}</span>
+                    <span>Alamat: {{ venue.address }}</span>
+                    <span>Kota: {{ venue.city }}</span>
+                    <span>Kapasitas: {{ venue.capacity }}</span>
+                </div>
+            </div>
+            {% if can_manage %}
+                <div class="actions">
+                    <a class="button secondary" href="{% url 'venue_update' venue.venue_id %}">Edit</a>
+                    <a class="button danger" href="{% url 'venue_delete' venue.venue_id %}">Hapus</a>
+                </div>
+            {% endif %}
+        </article>
+    {% empty %}
+        <div class="panel">Belum ada venue yang sesuai.</div>
+    {% endfor %}
+</section>
+{% endblock %}

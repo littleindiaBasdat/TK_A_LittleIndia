@@ -10,8 +10,7 @@
                 <select name="order" required>
                     <option value="">Pilih order</option>
                     {% for order in orders %}
-                        {# FIX: order_id (bukan id), customer_name dari JOIN #}
-                        <option value="{{ order.order_id }}">{{ order.order_id }} - {{ order.customer_name }}</option>
+                        <option value="{{ order.order_id }}">{{ order.order_id }} &mdash; {{ order.customer_name|default:"-" }} &mdash; {{ order.event_title }}</option>
                     {% endfor %}
                 </select>
             </label>
@@ -19,8 +18,10 @@
                 <select name="category" required>
                     <option value="">Pilih kategori</option>
                     {% for category in categories %}
-                        {# FIX: category_id, category_name, event_title dari JOIN #}
-                        <option value="{{ category.category_id }}">{{ category.event_title }} - {{ category.category_name }} - Rp{{ category.price }}</option>
+                        <option value="{{ category.category_id }}"
+                            {% if category.tickets_sold >= category.quota %}disabled{% endif %}>
+                            {{ category.event_title }} &mdash; {{ category.category_name }} &mdash; Rp{{ category.price }} &mdash; ({{ category.tickets_sold }}/{{ category.quota }}){% if category.tickets_sold >= category.quota %} [PENUH]{% endif %}
+                        </option>
                     {% endfor %}
                 </select>
             </label>
@@ -28,11 +29,13 @@
                 <select name="seat">
                     <option value="">Tanpa Kursi</option>
                     {% for seat in seats %}
-                        {# FIX: seat_id, venue_name, seat_number, row_number #}
                         <option value="{{ seat.seat_id }}">{{ seat.venue_name }} - {{ seat.section }} Baris {{ seat.row_number }} No. {{ seat.seat_number }}</option>
                     {% endfor %}
                 </select>
             </label>
+            <div class="meta">
+                <span><em>Kode Tiket akan di-generate otomatis oleh sistem.</em></span>
+            </div>
         {% else %}
             <div class="meta">
                 {# FIX: ticket_code (bukan code), field dari dict hasil raw SQL #}

@@ -39,7 +39,7 @@ def promotion_list_view(request):
         cursor.execute("SELECT COUNT(*) FROM order_promotion")
         total_usage = cursor.fetchone()[0]
 
-        cursor.execute("SELECT COUNT(*) FROM promotion WHERE discount_type = 'percent'")
+        cursor.execute("SELECT COUNT(*) FROM promotion WHERE discount_type = 'PERCENTAGE'")
         percent_count = cursor.fetchone()[0]
     
     return render(request, 'promotions/promotion_list.html', {
@@ -167,7 +167,7 @@ def promotion_delete_view(request, pk):
 def validate_promotion(promo_code, discount_type, discount_value, start_date, end_date, usage_limit):
     if not all([promo_code, discount_type, discount_value, start_date, end_date, usage_limit]):
         return 'Semua field wajib diisi.'
-    if discount_type not in ['percent', 'nominal']:
+    if discount_type not in ['PERCENTAGE', 'NOMINAL']:
         return 'Tipe diskon tidak valid.'
     try:
         value = float(discount_value)

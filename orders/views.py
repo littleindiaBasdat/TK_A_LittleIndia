@@ -13,7 +13,7 @@ def apply_discount(subtotal, promotion_data):
         return subtotal
     discount_type = promotion_data.get('discount_type')
     discount_value = Decimal(str(promotion_data.get('discount_value', 0)))
-    if discount_type == 'percent':
+    if discount_type == 'PERCENTAGE':
         discount = subtotal * discount_value / Decimal('100')
     else:
         discount = discount_value
@@ -142,30 +142,66 @@ def order_list_view(request):
 
 
 @raw_sql_login_required
-@raw_sql_login_required
 def order_create_view(request):
     if request.user.role != 'customer':
         messages.error(request, 'Hanya customer yang dapat membuat order.')
         return redirect('order_list')
-    
-    # Fetch categories dengan join event untuk display
+
+    selected_event_id = request.GET.get('event', '').strip()
+    selected_event = None
+
+    # Fetch categories dengan join event untuk display, optional filter by event
+    categories_sql = """
+        SELECT tc.category_id, tc.category_name, tc.quota, tc.price, tc.event_id,
+               e.event_title, e.event_datetime, v.venue_name
+        FROM ticket_category tc
+        JOIN event e ON tc.event_id = e.event_id
+        LEFT JOIN venue v ON e.venue_id = v.venue_id
+    """
+    categories_params = []
+    if selected_event_id:
+        categories_sql += " WHERE tc.event_id = %s"
+        categories_params.append(selected_event_id)
+    categories_sql += " ORDER BY e.event_datetime DESC, tc.category_name"
+
     with connection.cursor() as cursor:
-        cursor.execute("""
-            SELECT tc.category_id, tc.category_name, tc.quota, tc.price, tc.event_id,
-                   e.event_title, e.event_datetime, v.venue_name
-            FROM ticket_category tc
-            JOIN event e ON tc.event_id = e.event_id
-            LEFT JOIN venue v ON e.venue_id = v.venue_id
-            ORDER BY e.event_datetime DESC, tc.category_name
-        """)
+        cursor.execute(categories_sql, categories_params)
         cols = [col[0] for col in cursor.description]
         categories = [dict(zip(cols, row)) for row in cursor.fetchall()]
-    
+
+    if selected_event_id:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """SELECT e.event_id, e.event_title, e.event_datetime,
+                          v.venue_name, v.city
+                   FROM event e
+                   LEFT JOIN venue v ON e.venue_id = v.venue_id
+                   WHERE e.event_id = %s""",
+                [selected_event_id]
+            )
+            row = cursor.fetchone()
+            if row:
+                selected_event = dict(zip(['event_id', 'event_title', 'event_datetime',
+                                           'venue_name', 'city'], row))
+
     # Fetch promotions
     with connection.cursor() as cursor:
         cursor.execute("SELECT * FROM promotion ORDER BY promo_code")
         cols = [col[0] for col in cursor.description]
         promotions = [dict(zip(cols, row)) for row in cursor.fetchall()]
+
+    # Fetch available seats (belum di-assign ke tiket)
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """SELECT s.seat_id, s.section, s.row_number, s.seat_number,
+                      v.venue_name
+               FROM seat s
+               LEFT JOIN venue v ON s.venue_id = v.venue_id
+               WHERE s.seat_id NOT IN (SELECT DISTINCT seat_id FROM has_relationship)
+               ORDER BY v.venue_name, s.section, s.row_number, s.seat_number"""
+        )
+        cols = [col[0] for col in cursor.description]
+        seats = [dict(zip(cols, row)) for row in cursor.fetchall()]
     
     if request.method == 'POST':
         category_id = request.POST.get('category')
@@ -186,7 +222,7 @@ def order_create_view(request):
                     category_row = cursor.fetchone()
                     if not category_row:
                         messages.error(request, 'Kategori tiket tidak ditemukan.')
-                        return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions})
+                        return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
                     category = dict(zip(cols, category_row))
                 
                 promotion = None
@@ -208,7 +244,7 @@ def order_create_view(request):
                         promo_row = cursor.fetchone()
                         if not promo_row:
                             messages.error(request, 'Kode promo tidak valid atau sudah tidak tersedia.')
-                            return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions})
+                            return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
                         promotion = dict(zip(cols, promo_row))
                         promotion_id = promotion['promotion_id']  # Fixed: promotion_id not id
                 
@@ -226,7 +262,7 @@ def order_create_view(request):
                     customer_row = cursor.fetchone()
                     if not customer_row:
                         messages.error(request, 'Data customer tidak ditemukan.')
-                        return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions})
+                        return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
                     customer_id = customer_row[0]
                     
                     cursor.execute(
@@ -246,7 +282,7 @@ def order_create_view(request):
                 messages.success(request, f'Order {order_id} berhasil dibuat.')
                 return redirect('order_list')
     
-    return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions})
+    return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
 
 
 @raw_sql_login_required
@@ -256,24 +292,38 @@ def order_update_view(request, pk):
         return redirect('order_list')
     
     with connection.cursor() as cursor:
-        cursor.execute("SELECT * FROM \"ORDER\" WHERE order_id = %s", [pk])
+        cursor.execute(
+            """SELECT DISTINCT o.*, c.full_name AS customer_name, e.event_title AS event_name
+               FROM "ORDER" o
+               LEFT JOIN customer c ON o.customer_id = c.customer_id
+               LEFT JOIN ticket t ON o.order_id = t.order_id
+               LEFT JOIN ticket_category tc ON t.category_id = tc.category_id
+               LEFT JOIN event e ON tc.event_id = e.event_id
+               WHERE o.order_id = %s""",
+            [pk]
+        )
         cols = [col[0] for col in cursor.description]
         order_row = cursor.fetchone()
         if not order_row:
             messages.error(request, 'Order tidak ditemukan.')
             return redirect('order_list')
         order = dict(zip(cols, order_row))
-    
+
     if request.method == 'POST':
-        payment_status = request.POST.get('payment_status', 'pending')
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "UPDATE \"ORDER\" SET payment_status = %s WHERE order_id = %s",
-                [payment_status, pk]
-            )
+        payment_status = request.POST.get('payment_status', 'Pending')
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE \"ORDER\" SET payment_status = %s WHERE order_id = %s",
+                    [payment_status, pk]
+                )
+        except Exception as exc:
+            messages.error(request, str(exc))
+            return render(request, 'orders/order_form.html', {'order': order, 'action': 'update'})
+
         messages.success(request, 'Order berhasil diperbarui.')
         return redirect('order_list')
-    
+
     return render(request, 'orders/order_form.html', {'order': order, 'action': 'update'})
 
 
