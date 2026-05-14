@@ -4,8 +4,18 @@ from django.contrib import messages
 from accounts.middleware import raw_sql_login_required
 from django.shortcuts import redirect, render
 from django.utils import timezone
-from django.db import connection
+from django.db import connection, transaction
 from .models import Order
+
+
+def _pg_error_message(exc):
+    """Extract the primary message from a PostgreSQL trigger RAISE EXCEPTION."""
+    cause = getattr(exc, '__cause__', None)
+    if cause is not None:
+        diag = getattr(cause, 'diag', None)
+        if diag is not None and diag.message_primary:
+            return diag.message_primary
+    return str(exc).strip()
 
 
 def apply_discount(subtotal, promotion_data):
@@ -263,46 +273,46 @@ def order_create_view(request):
         # Trigger PostgreSQL akan validate constraint dan RAISE EXCEPTION jika ada masalah.
         order_id = str(uuid.uuid4())
         try:
-            with connection.cursor() as cursor:
-                # 1. Insert ORDER
-                cursor.execute(
-                    """INSERT INTO "ORDER" (order_id, customer_id, total_amount, payment_status, order_date)
-                       VALUES (%s, %s, %s, %s, %s)""",
-                    [order_id, customer_id, total, 'Pending', timezone.now()]
-                )
-
-                # 2. Insert TICKETs (sebanyak quantity).
-                # TODO: Abid (Trigger 5.2) - validasi kuota kategori tiket akan
-                # di-handle oleh trigger BEFORE INSERT ON ticket di sini.
-                # Pesan error trigger akan ditangkap oleh except di bawah.
-                first_ticket_id = None
-                for _ in range(quantity):
-                    ticket_id = str(uuid.uuid4())
-                    ticket_code = f'TKT-{uuid.uuid4().hex[:10].upper()}'
+            with transaction.atomic():
+                with connection.cursor() as cursor:
+                    # 1. Insert ORDER
                     cursor.execute(
-                        """INSERT INTO ticket (ticket_id, ticket_code, category_id, order_id)
-                           VALUES (%s, %s, %s, %s)""",
-                        [ticket_id, ticket_code, category_id, order_id]
-                    )
-                    if first_ticket_id is None:
-                        first_ticket_id = ticket_id
-
-                # 3. Assign seat to first ticket (jika seat dipilih dan hanya 1 tiket masuk akal)
-                if seat_id and first_ticket_id:
-                    cursor.execute(
-                        "INSERT INTO has_relationship (ticket_id, seat_id) VALUES (%s, %s)",
-                        [first_ticket_id, seat_id]
+                        """INSERT INTO "ORDER" (order_id, customer_id, total_amount, payment_status, order_date)
+                           VALUES (%s, %s, %s, %s, %s)""",
+                        [order_id, customer_id, total, 'Pending', timezone.now()]
                     )
 
-                # 4. Insert ORDER_PROMOTION (trigger No. 4 akan fire di sini)
-                if promotion_id:
-                    cursor.execute(
-                        "INSERT INTO order_promotion (order_id, promotion_id) VALUES (%s, %s)",
-                        [order_id, promotion_id]
-                    )
+                    # 2. Insert TICKETs (sebanyak quantity).
+                    # Trigger 5.2 fires here — exception rolls back ORDER + all tickets.
+                    first_ticket_id = None
+                    for _ in range(quantity):
+                        ticket_id = str(uuid.uuid4())
+                        ticket_code = f'TKT-{uuid.uuid4().hex[:10].upper()}'
+                        cursor.execute(
+                            """INSERT INTO ticket (ticket_id, ticket_code, category_id, order_id)
+                               VALUES (%s, %s, %s, %s)""",
+                            [ticket_id, ticket_code, category_id, order_id]
+                        )
+                        if first_ticket_id is None:
+                            first_ticket_id = ticket_id
+
+                    # 3. Assign seat to first ticket (jika seat dipilih)
+                    if seat_id and first_ticket_id:
+                        cursor.execute(
+                            "INSERT INTO has_relationship (ticket_id, seat_id) VALUES (%s, %s)",
+                            [first_ticket_id, seat_id]
+                        )
+
+                    # 4. Insert ORDER_PROMOTION (trigger No. 4 akan fire di sini)
+                    if promotion_id:
+                        cursor.execute(
+                            "INSERT INTO order_promotion (order_id, promotion_id) VALUES (%s, %s)",
+                            [order_id, promotion_id]
+                        )
         except Exception as exc:
-            # Pesan error dari RAISE EXCEPTION di trigger akan muncul di sini
-            messages.error(request, str(exc))
+            # Pesan error dari RAISE EXCEPTION di trigger akan muncul di sini.
+            # transaction.atomic() memastikan ORDER + semua tiket di-rollback jika ada error.
+            messages.error(request, _pg_error_message(exc))
             return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
 
         messages.success(request, f'Order {order_id} berhasil dibuat dengan {quantity} tiket.')

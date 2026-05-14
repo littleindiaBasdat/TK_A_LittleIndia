@@ -1,0 +1,131 @@
+/* ============================================================
+   OrderPage — Checkout & Order List
+   ============================================================ */
+
+/* ---- Checkout form card ---- */
+.checkout-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  max-width: 620px;
+  margin: 0 auto;
+}
+
+.checkout-card h2 {
+  font-family: var(--font-display);
+  font-size: 22px;
+  margin-bottom: 4px;
+}
+
+.checkout-card .checkout-desc {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  margin-bottom: 24px;
+}
+
+.checkout-summary {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  margin-top: 8px;
+  margin-bottom: 24px;
+}
+
+.checkout-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  color: var(--color-text-muted);
+  padding: 6px 0;
+}
+
+.checkout-summary-row.total {
+  border-top: 1px solid var(--color-border);
+  margin-top: 10px;
+  padding-top: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  font-size: 16px;
+}
+
+.checkout-summary-row.total .checkout-total-value {
+  color: var(--color-accent);
+  font-family: var(--font-display);
+  font-size: 22px;
+}
+
+/* ---- Status badge ---- */
+.status-lunas {
+  background: var(--color-green-dim);
+  color: var(--color-green);
+  border: 1px solid var(--color-green);
+}
+
+.status-pending {
+  background: var(--color-accent-dim);
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent);
+}
+
+/* ---- View toggle ---- */
+.view-toggle {
+  display: flex;
+  gap: 4px;
+}
+
+.view-toggle .btn.active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* ---- Result count ---- */
+.result-count {
+  font-size: 12px;
+  color: var(--color-text-faint);
+  margin-bottom: 14px;
+  font-family: var(--font-mono);
+}
+
+/* ---- Tab switcher for Checkout / List ---- */
+.order-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 28px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+  width: fit-content;
+}
+
+.order-tab {
+  padding: 8px 20px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.order-tab:hover {
+  color: var(--color-text);
+}
+
+.order-tab.active {
+  background: var(--color-accent);
+  color: #000;
+  font-weight: 600;
+}
+
+@media (max-width: 600px) {
+  .checkout-card {
+    padding: 20px;
+  }
+}

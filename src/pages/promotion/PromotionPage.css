@@ -1,0 +1,76 @@
+/* ============================================================
+   PromotionPage — Promotion Management
+   ============================================================ */
+
+.promo-code-cell {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-accent);
+  letter-spacing: 0.04em;
+}
+
+.discount-type-percentage {
+  background: var(--color-blue-dim);
+  color: var(--color-blue);
+  border: 1px solid var(--color-blue);
+}
+
+.discount-type-nominal {
+  background: var(--color-green-dim);
+  color: var(--color-green);
+  border: 1px solid var(--color-green);
+}
+
+.usage-bar-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.usage-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--color-surface-3);
+  border-radius: 3px;
+  overflow: hidden;
+  min-width: 60px;
+}
+
+.usage-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.usage-bar-fill.low {
+  background: var(--color-green);
+}
+
+.usage-bar-fill.medium {
+  background: var(--color-accent);
+}
+
+.usage-bar-fill.high {
+  background: var(--color-red);
+}
+
+.usage-text {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.date-range {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.result-count {
+  font-size: 12px;
+  color: var(--color-text-faint);
+  margin-bottom: 14px;
+  font-family: var(--font-mono);
+}
