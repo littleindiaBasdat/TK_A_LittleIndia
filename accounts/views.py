@@ -119,14 +119,9 @@ def register_view(request):
         elif password != password2:
             messages.error(request, 'Password tidak cocok.')
         else:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT 1 FROM user_account WHERE username = %s",
-                    [username]
-                )
-                if cursor.fetchone():
-                    messages.error(request, 'Username sudah digunakan.')
-                    return render(request, 'accounts/register.html')
+            # Validasi uniqueness username (case-insensitive) & karakter spesial
+            # dilakukan oleh Trigger No. 1 (trg_validate_user_registration).
+            # Pesan error trigger akan ditangkap oleh try/except saat INSERT.
 
             full_name = request.POST.get('full_name', '').strip()
             phone = request.POST.get('phone', '').strip()

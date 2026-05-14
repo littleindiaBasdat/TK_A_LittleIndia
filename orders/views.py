@@ -207,80 +207,106 @@ def order_create_view(request):
         category_id = request.POST.get('category')
         quantity_raw = request.POST.get('quantity', '1')
         promo_code = request.POST.get('promo_code', '').strip()
-        
+        seat_id = request.POST.get('seat') or None
+
+        # Basic field validation only (NOT business rules - those go to triggers)
         if not category_id or not quantity_raw.isdigit():
             messages.error(request, 'Kategori tiket dan jumlah tiket wajib diisi dengan benar.')
-        else:
-            quantity = int(quantity_raw)
-            if quantity < 1 or quantity > 10:
-                messages.error(request, 'Jumlah tiket harus 1 sampai 10.')
-            else:
-                # Fetch category
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT * FROM ticket_category WHERE category_id = %s", [category_id])
-                    cols = [col[0] for col in cursor.description]
-                    category_row = cursor.fetchone()
-                    if not category_row:
-                        messages.error(request, 'Kategori tiket tidak ditemukan.')
-                        return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
-                    category = dict(zip(cols, category_row))
-                
-                promotion = None
-                promotion_id = None
-                if promo_code:
-                    today = timezone.localdate()
-                    with connection.cursor() as cursor:
-                        cursor.execute(
-                            """SELECT p.*,
-                                      (SELECT COUNT(*) FROM order_promotion op WHERE op.promotion_id = p.promotion_id) AS usage_count
-                               FROM promotion p
-                               WHERE LOWER(p.promo_code) = LOWER(%s)
-                               AND p.start_date <= %s
-                               AND p.end_date >= %s
-                               AND (SELECT COUNT(*) FROM order_promotion op WHERE op.promotion_id = p.promotion_id) < p.usage_limit""",
-                            [promo_code, today, today]
-                        )
-                        cols = [col[0] for col in cursor.description]
-                        promo_row = cursor.fetchone()
-                        if not promo_row:
-                            messages.error(request, 'Kode promo tidak valid atau sudah tidak tersedia.')
-                            return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
-                        promotion = dict(zip(cols, promo_row))
-                        promotion_id = promotion['promotion_id']  # Fixed: promotion_id not id
-                
-                subtotal = Decimal(str(category['price'])) * quantity
-                total = apply_discount(subtotal, promotion)
-                
-                # Create order (only with valid columns)
-                order_id = str(uuid.uuid4())
-                with connection.cursor() as cursor:
-                    # Get customer_id from user_id
+            return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
+
+        quantity = int(quantity_raw)
+        if quantity < 1 or quantity > 10:
+            messages.error(request, 'Jumlah tiket harus 1 sampai 10.')
+            return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
+
+        # Fetch category for price calculation
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM ticket_category WHERE category_id = %s", [category_id])
+            cols = [col[0] for col in cursor.description]
+            category_row = cursor.fetchone()
+            if not category_row:
+                messages.error(request, 'Kategori tiket tidak ditemukan.')
+                return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
+            category = dict(zip(cols, category_row))
+
+        # Resolve promo_code -> promotion_id (lookup only, NO usage_limit / date check here).
+        # Validasi usage_limit & event_date dikerjakan oleh trigger No. 4 di PostgreSQL.
+        promotion = None
+        promotion_id = None
+        if promo_code:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT * FROM promotion WHERE LOWER(promo_code) = LOWER(%s)",
+                    [promo_code]
+                )
+                cols = [col[0] for col in cursor.description]
+                promo_row = cursor.fetchone()
+                if not promo_row:
+                    messages.error(request, f'Kode promo "{promo_code}" tidak ditemukan.')
+                    return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
+                promotion = dict(zip(cols, promo_row))
+                promotion_id = promotion['promotion_id']
+
+        subtotal = Decimal(str(category['price'])) * quantity
+        total = apply_discount(subtotal, promotion)
+
+        # Get customer_id
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT customer_id FROM customer WHERE user_id = %s", [request.user.id])
+            customer_row = cursor.fetchone()
+            if not customer_row:
+                messages.error(request, 'Data customer tidak ditemukan.')
+                return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
+            customer_id = customer_row[0]
+
+        # Perform the order, tickets, and promotion inserts.
+        # Trigger PostgreSQL akan validate constraint dan RAISE EXCEPTION jika ada masalah.
+        order_id = str(uuid.uuid4())
+        try:
+            with connection.cursor() as cursor:
+                # 1. Insert ORDER
+                cursor.execute(
+                    """INSERT INTO "ORDER" (order_id, customer_id, total_amount, payment_status, order_date)
+                       VALUES (%s, %s, %s, %s, %s)""",
+                    [order_id, customer_id, total, 'Pending', timezone.now()]
+                )
+
+                # 2. Insert TICKETs (sebanyak quantity).
+                # TODO: Abid (Trigger 5.2) - validasi kuota kategori tiket akan
+                # di-handle oleh trigger BEFORE INSERT ON ticket di sini.
+                # Pesan error trigger akan ditangkap oleh except di bawah.
+                first_ticket_id = None
+                for _ in range(quantity):
+                    ticket_id = str(uuid.uuid4())
+                    ticket_code = f'TKT-{uuid.uuid4().hex[:10].upper()}'
                     cursor.execute(
-                        "SELECT customer_id FROM customer WHERE user_id = %s",
-                        [request.user.id]
+                        """INSERT INTO ticket (ticket_id, ticket_code, category_id, order_id)
+                           VALUES (%s, %s, %s, %s)""",
+                        [ticket_id, ticket_code, category_id, order_id]
                     )
-                    customer_row = cursor.fetchone()
-                    if not customer_row:
-                        messages.error(request, 'Data customer tidak ditemukan.')
-                        return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
-                    customer_id = customer_row[0]
-                    
+                    if first_ticket_id is None:
+                        first_ticket_id = ticket_id
+
+                # 3. Assign seat to first ticket (jika seat dipilih dan hanya 1 tiket masuk akal)
+                if seat_id and first_ticket_id:
                     cursor.execute(
-                        """INSERT INTO "ORDER" (order_id, customer_id, total_amount, payment_status, order_date)
-                           VALUES (%s, %s, %s, %s, %s)""",
-                        [order_id, customer_id, total, 'Pending', timezone.now()]
+                        "INSERT INTO has_relationship (ticket_id, seat_id) VALUES (%s, %s)",
+                        [first_ticket_id, seat_id]
                     )
-                    
-                    # Link promotion if applied
-                    if promotion_id:
-                        op_id = str(uuid.uuid4())
-                        cursor.execute(
-                            "INSERT INTO order_promotion (order_promotion_id, order_id, promotion_id) VALUES (%s, %s, %s)",
-                            [op_id, order_id, promotion_id]
-                        )
-                
-                messages.success(request, f'Order {order_id} berhasil dibuat.')
-                return redirect('order_list')
+
+                # 4. Insert ORDER_PROMOTION (trigger No. 4 akan fire di sini)
+                if promotion_id:
+                    cursor.execute(
+                        "INSERT INTO order_promotion (order_id, promotion_id) VALUES (%s, %s)",
+                        [order_id, promotion_id]
+                    )
+        except Exception as exc:
+            # Pesan error dari RAISE EXCEPTION di trigger akan muncul di sini
+            messages.error(request, str(exc))
+            return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
+
+        messages.success(request, f'Order {order_id} berhasil dibuat dengan {quantity} tiket.')
+        return redirect('order_list')
     
     return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
 

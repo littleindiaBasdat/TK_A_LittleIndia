@@ -180,6 +180,9 @@ def event_create_view(request):
                            VALUES (%s, %s, %s, %s, %s)""",
                         [event_id, event_title, event_datetime, venue_id, organizer_id]
                     )
+                    # TODO: Ammar (Trigger 3.1) - validasi duplikasi (event_id, artist_id)
+                    # & eksistensi artist/event akan di-handle oleh trigger BEFORE INSERT
+                    # ON event_artist. Pesan error trigger akan ditangkap di except di bawah.
                     for aid in artist_ids:
                         cursor.execute(
                             "INSERT INTO event_artist (event_id, artist_id, role) VALUES (%s, %s, %s)",
@@ -253,6 +256,8 @@ def event_update_view(request, pk):
                         [event_title, event_datetime, venue_id, organizer_id, pk]
                     )
                     cursor.execute("DELETE FROM event_artist WHERE event_id = %s", [pk])
+                    # TODO: Ammar (Trigger 3.1) - validasi duplikasi (event_id, artist_id)
+                    # & eksistensi artist/event di-handle oleh trigger BEFORE INSERT ON event_artist.
                     for aid in artist_ids:
                         cursor.execute(
                             "INSERT INTO event_artist (event_id, artist_id, role) VALUES (%s, %s, %s)",

@@ -216,15 +216,16 @@ def seat_delete_view(request, pk):
             return redirect('seat_list')
         seat = dict(zip(cols, seat_row))
 
-        # FIX: cek lewat has_relationship, bukan ticket.seat_id
-        cursor.execute("SELECT 1 FROM has_relationship WHERE seat_id = %s", [pk])
-        if cursor.fetchone():
-            messages.error(request, 'Kursi ini sudah di-assign ke tiket dan tidak dapat dihapus. Hapus atau ubah tiket terlebih dahulu.')
-            return redirect('seat_list')
-
     if request.method == 'POST':
-        with connection.cursor() as cursor:
-            cursor.execute("DELETE FROM seat WHERE seat_id = %s", [pk])
+        # TODO: Abid (Trigger 5.1) - validasi kursi sudah di-assign ke tiket
+        # (cek tabel has_relationship) akan di-handle oleh trigger BEFORE DELETE ON seat.
+        # Pesan error trigger akan ditangkap oleh try/except di bawah ini.
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("DELETE FROM seat WHERE seat_id = %s", [pk])
+        except Exception as exc:
+            messages.error(request, str(exc))
+            return redirect('seat_list')
         messages.success(request, 'Kursi berhasil dihapus.')
         return redirect('seat_list')
 

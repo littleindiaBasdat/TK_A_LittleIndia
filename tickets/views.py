@@ -160,6 +160,9 @@ def ticket_create_view(request):
         orders = [dict(zip(cols, row)) for row in cursor.fetchall()]
 
     # Get categories with quota usage info
+    # TODO: Ammar (Trigger 3.2) - bisa diganti pakai stored function sisa kuota
+    # berdasarkan event_id (lihat spec No. 3.2). Kalau fungsi sudah ready,
+    # gunakan: SELECT * FROM get_remaining_quota_by_event(<event_id>);
     categories_sql = """
         SELECT tc.category_id, tc.category_name, tc.quota, tc.price,
                tc.event_id, e.event_title, v.venue_name, v.venue_id,
@@ -205,47 +208,54 @@ def ticket_create_view(request):
         if not all([order_id, category_id]):
             messages.error(request, 'Order dan kategori tiket wajib dipilih.')
         else:
-            with connection.cursor() as cursor:
-                # Verify order exists
-                cursor.execute('SELECT order_id FROM "ORDER" WHERE order_id = %s', [order_id])
-                if not cursor.fetchone():
-                    messages.error(request, 'Order tidak ditemukan.')
-                    return render(request, 'tickets/ticket_form.html', {
-                        'orders': orders, 'categories': categories, 'seats': seats, 'action': 'create',
-                    })
-
-                # Verify category exists
-                cursor.execute("SELECT category_id FROM ticket_category WHERE category_id = %s", [category_id])
-                if not cursor.fetchone():
-                    messages.error(request, 'Kategori tiket tidak valid.')
-                    return render(request, 'tickets/ticket_form.html', {
-                        'orders': orders, 'categories': categories, 'seats': seats, 'action': 'create',
-                    })
-
-                # Verify seat if provided
-                if seat_id:
-                    cursor.execute("SELECT seat_id FROM seat WHERE seat_id = %s", [seat_id])
+            # TODO: Abid (Trigger 5.2) - validasi kuota kategori tiket (tickets_sold >= quota)
+            # akan di-handle oleh trigger BEFORE INSERT ON ticket. Pesan error trigger
+            # akan ditangkap oleh try/except di bawah ini.
+            try:
+                with connection.cursor() as cursor:
+                    # Basic FK existence check (cepat di Python untuk UX yang ramah).
+                    # Constraint sebenarnya tetap di-enforce oleh DB.
+                    cursor.execute('SELECT order_id FROM "ORDER" WHERE order_id = %s', [order_id])
                     if not cursor.fetchone():
-                        messages.error(request, 'Seat tidak valid.')
+                        messages.error(request, 'Order tidak ditemukan.')
                         return render(request, 'tickets/ticket_form.html', {
                             'orders': orders, 'categories': categories, 'seats': seats, 'action': 'create',
                         })
 
-                # FIX: INSERT sesuai kolom DB: ticket_id, ticket_code, category_id, order_id
-                ticket_id = str(uuid.uuid4())
-                code = f'TKT-{uuid.uuid4().hex[:10].upper()}'
-                cursor.execute(
-                    """INSERT INTO ticket (ticket_id, ticket_code, category_id, order_id)
-                       VALUES (%s, %s, %s, %s)""",
-                    [ticket_id, code, category_id, order_id]
-                )
+                    cursor.execute("SELECT category_id FROM ticket_category WHERE category_id = %s", [category_id])
+                    if not cursor.fetchone():
+                        messages.error(request, 'Kategori tiket tidak valid.')
+                        return render(request, 'tickets/ticket_form.html', {
+                            'orders': orders, 'categories': categories, 'seats': seats, 'action': 'create',
+                        })
 
-                # Insert seat relation if seat provided
-                if seat_id:
+                    if seat_id:
+                        cursor.execute("SELECT seat_id FROM seat WHERE seat_id = %s", [seat_id])
+                        if not cursor.fetchone():
+                            messages.error(request, 'Seat tidak valid.')
+                            return render(request, 'tickets/ticket_form.html', {
+                                'orders': orders, 'categories': categories, 'seats': seats, 'action': 'create',
+                            })
+
+                    # INSERT ticket - Trigger 5.2 (Abid) akan fire di sini untuk validasi kuota
+                    ticket_id = str(uuid.uuid4())
+                    code = f'TKT-{uuid.uuid4().hex[:10].upper()}'
                     cursor.execute(
-                        "INSERT INTO has_relationship (ticket_id, seat_id) VALUES (%s, %s)",
-                        [ticket_id, seat_id]
+                        """INSERT INTO ticket (ticket_id, ticket_code, category_id, order_id)
+                           VALUES (%s, %s, %s, %s)""",
+                        [ticket_id, code, category_id, order_id]
                     )
+
+                    if seat_id:
+                        cursor.execute(
+                            "INSERT INTO has_relationship (ticket_id, seat_id) VALUES (%s, %s)",
+                            [ticket_id, seat_id]
+                        )
+            except Exception as exc:
+                messages.error(request, str(exc))
+                return render(request, 'tickets/ticket_form.html', {
+                    'orders': orders, 'categories': categories, 'seats': seats, 'action': 'create',
+                })
 
             messages.success(request, 'Tiket berhasil dibuat.')
             return redirect('ticket_list')

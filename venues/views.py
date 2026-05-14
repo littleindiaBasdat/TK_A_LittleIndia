@@ -68,6 +68,9 @@ def venue_create_view(request):
             })
 
         venue_id = str(uuid.uuid4())
+        # TODO: Justin (Trigger 2.1) - validasi duplikasi nama venue di kota yang sama
+        # (case-insensitive) akan di-handle oleh trigger BEFORE INSERT ON venue.
+        # Pesan error trigger akan ditangkap oleh try/except di bawah ini.
         try:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -117,6 +120,8 @@ def venue_update_view(request, pk):
             messages.error(request, error)
             return render(request, 'venues/venue_form.html', {'venue': venue, 'action': 'update'})
 
+        # TODO: Justin (Trigger 2.1) - validasi duplikasi nama venue di kota yang sama
+        # (case-insensitive) akan di-handle oleh trigger BEFORE UPDATE ON venue.
         try:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -150,6 +155,8 @@ def venue_delete_view(request, pk):
         venue = dict(zip(cols, row))
 
     if request.method == 'POST':
+        # TODO: Justin (Trigger 2.2) - cegah penghapusan venue jika masih memiliki
+        # event aktif akan di-handle oleh trigger BEFORE DELETE ON venue.
         try:
             with connection.cursor() as cursor:
                 cursor.execute("DELETE FROM venue WHERE venue_id = %s", [pk])

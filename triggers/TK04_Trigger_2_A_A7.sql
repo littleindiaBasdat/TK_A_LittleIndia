@@ -1,0 +1,6 @@
+-- =============================================================================
+-- Justin
+-- Trigger No. 2 - Validasi Venue
+--   2.1 Mencegah Duplikasi Nama Venue di Kota yang Sama (ignore case)
+--   2.2 Mencegah Penghapusan Venue jika Masih Memiliki Event Aktif
+-- =============================================================================
