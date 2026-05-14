@@ -1,24 +1,36 @@
 {% extends "base.html" %}
-{% block title %}{% if action == "update" %}Update Order{% else %}Buat Order{% endif %} | TikTakTuk{% endblock %}
+{% block title %}{% if action == "update" %}Update Order{% else %}Checkout Tiket{% endif %} | TikTakTuk{% endblock %}
 {% block content %}
-<section class="panel">
-    <h1>{% if action == "update" %}Update Order{% elif selected_event %}Checkout - {{ selected_event.event_title }}{% else %}Buat Order{% endif %}</h1>
-    {% if selected_event and action != "update" %}
-        <div class="meta" style="margin-bottom:18px;">
-            <span>Event: <strong>{{ selected_event.event_title }}</strong></span>
-            <span>Tanggal &amp; Waktu: {{ selected_event.event_datetime|date:"d M Y H:i" }}</span>
-            <span>Venue: {{ selected_event.venue_name|default:"-" }}{% if selected_event.city %}, {{ selected_event.city }}{% endif %}</span>
-        </div>
-    {% endif %}
-    <form class="stack" method="post">
-        {% csrf_token %}
-        {% if action == "update" %}
-            <div class="meta">
-                <span>Order ID: {{ order.order_id }}</span>
-                <span>Customer: {{ order.customer_name|default:"-" }}</span>
-                <span>Event: {{ order.event_name|default:"-" }}</span>
-                <span>Total: Rp{{ order.total_amount }}</span>
+
+{% if action == "update" %}
+{# ==================== UPDATE ORDER FORM (Admin) ==================== #}
+<div style="max-width:520px; margin:0 auto;">
+    <div style="margin-bottom:20px;">
+        <a href="{% url 'order_list' %}" style="color:#6b7280; font-size:14px;">← Kembali ke Daftar Order</a>
+    </div>
+    <div class="panel">
+        <h2 style="margin:0 0 20px;">Update Status Order</h2>
+        <div style="background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px; padding:14px; margin-bottom:20px; display:grid; gap:6px;">
+            <div style="font-size:11px; color:#9ca3af; font-weight:700; text-transform:uppercase; margin-bottom:4px;">Detail Order</div>
+            <div style="display:flex; gap:8px; font-size:13px;">
+                <span style="color:#9ca3af; min-width:80px;">Order ID</span>
+                <span style="font-weight:700; font-family:monospace; color:#374151; font-size:12px; word-break:break-all;">{{ order.order_id }}</span>
             </div>
+            <div style="display:flex; gap:8px; font-size:13px;">
+                <span style="color:#9ca3af; min-width:80px;">Customer</span>
+                <span style="font-weight:600;">{{ order.customer_name|default:"-" }}</span>
+            </div>
+            <div style="display:flex; gap:8px; font-size:13px;">
+                <span style="color:#9ca3af; min-width:80px;">Event</span>
+                <span>{{ order.event_name|default:"-" }}</span>
+            </div>
+            <div style="display:flex; gap:8px; font-size:13px;">
+                <span style="color:#9ca3af; min-width:80px;">Total</span>
+                <span style="font-weight:700; color:#0f766e;">Rp {{ order.total_amount|floatformat:0 }}</span>
+            </div>
+        </div>
+        <form class="stack" method="post">
+            {% csrf_token %}
             <label>Status Pembayaran
                 <select name="payment_status" required>
                     <option value="Lunas" {% if order.payment_status == "Lunas" %}selected{% endif %}>Lunas</option>
@@ -26,41 +38,272 @@
                     <option value="Dibatalkan" {% if order.payment_status == "Dibatalkan" %}selected{% endif %}>Dibatalkan</option>
                 </select>
             </label>
-        {% else %}
-            <label>Kategori Tiket
-                <select name="category" required>
-                    <option value="">Pilih kategori tiket</option>
-                    {% for category in categories %}
-                        <option value="{{ category.category_id }}">{{ category.event_title }} - {{ category.category_name }} - Rp{{ category.price }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label>Jumlah Tiket
-                <input type="number" name="quantity" min="1" max="10" value="1" required>
-            </label>
-            <label>Pilih Kursi (Opsional)
-                <select name="seat">
-                    <option value="">Tanpa Kursi (Free seating)</option>
-                    {% for seat in seats %}
-                        <option value="{{ seat.seat_id }}">
-                            {{ seat.venue_name }} - {{ seat.section }} Baris {{ seat.row_number }} No. {{ seat.seat_number }}
-                        </option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label>Kode Promo
-                <input name="promo_code" list="promo-options" placeholder="Opsional">
-            </label>
-            <datalist id="promo-options">
-                {% for promotion in promotions %}
-                    <option value="{{ promotion.promo_code }}">{{ promotion.discount_type }}</option>
-                {% endfor %}
-            </datalist>
-        {% endif %}
-        <div class="actions">
-            <button class="primary" type="submit">{% if action == "update" %}Update{% else %}Buat Order{% endif %}</button>
-            <a class="button secondary" href="{% url 'order_list' %}">Batal</a>
+            <div class="actions" style="justify-content:flex-end; margin-top:8px;">
+                <a class="button secondary" href="{% url 'order_list' %}">Batal</a>
+                <button class="primary" type="submit">Update</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% else %}
+{# ==================== CHECKOUT (Customer) ==================== #}
+<div style="max-width:1020px; margin:0 auto;">
+    <!-- Breadcrumb -->
+    <div style="margin-bottom:20px; display:flex; align-items:center; gap:8px; font-size:13px; color:#9ca3af;">
+        <a href="{% url 'event_browse' %}" style="color:#2563eb; font-weight:600;">Pilih Event</a>
+        <span>›</span>
+        <span style="color:#374151; font-weight:600;">Bayar</span>
+    </div>
+
+    <form method="post" id="checkout-form">
+        {% csrf_token %}
+        <div style="display:grid; grid-template-columns:1fr 320px; gap:24px; align-items:start;">
+
+            <!-- ============ LEFT COLUMN ============ -->
+            <div class="stack">
+
+                <!-- Event Info Card -->
+                {% if selected_event %}
+                <div class="panel" style="display:flex; gap:16px; align-items:flex-start;">
+                    <div style="width:52px; height:52px; background:#2563eb; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:26px; flex-shrink:0;">🎵</div>
+                    <div style="flex:1; min-width:0;">
+                        <h2 style="margin:0 0 6px; font-size:18px;">{{ selected_event.event_title }}</h2>
+                        {% if event_artists %}
+                        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;">
+                            {% for artist in event_artists %}
+                            <span style="background:#eff6ff; color:#1d4ed8; font-size:12px; font-weight:600; padding:2px 10px; border-radius:99px;">{{ artist }}</span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        <div style="font-size:13px; color:#6b7280; display:flex; flex-direction:column; gap:3px;">
+                            <span>📅 {{ selected_event.event_datetime|date:"d M Y" }} · {{ selected_event.event_datetime|date:"H:i" }} WIB</span>
+                            <span>📍 {{ selected_event.venue_name|default:"-" }}{% if selected_event.city %}, {{ selected_event.city }}{% endif %}</span>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Category Selection -->
+                <div class="panel">
+                    <h3 style="margin:0 0 4px; font-size:15px;">Pilih Kategori Tiket</h3>
+                    <p style="margin:0 0 16px; font-size:13px;">Setiap kategori memiliki fasilitas berbeda</p>
+                    <div style="display:grid; gap:10px;">
+                        {% for cat in categories %}
+                        <label class="cat-opt" style="cursor:pointer; display:block;">
+                            <input type="radio" name="category" value="{{ cat.category_id }}"
+                                   data-price="{{ cat.price }}" data-name="{{ cat.category_name }}"
+                                   style="display:none;" onchange="onCatChange(this)" required>
+                            <div class="cat-card" style="display:flex; justify-content:space-between; align-items:center; padding:14px 16px; border:2px solid #e5e7eb; border-radius:10px; transition:all .15s;">
+                                <div>
+                                    <div style="font-weight:700; font-size:14px; color:#1a2035;">{{ cat.category_name }}</div>
+                                    <div style="font-size:12px; color:#9ca3af; margin-top:2px;">Kuota: {{ cat.quota }} tiket</div>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:10px;">
+                                    <span class="cat-price" style="font-weight:700; font-size:15px; color:#2563eb;">Rp {{ cat.price|floatformat:0 }}</span>
+                                    <div class="cat-check" style="width:22px; height:22px; border-radius:50%; background:#2563eb; display:none; align-items:center; justify-content:center; color:#fff; font-size:13px; font-weight:700;">✓</div>
+                                </div>
+                            </div>
+                        </label>
+                        {% empty %}
+                        <div style="color:#9ca3af; text-align:center; padding:20px;">Belum ada kategori tiket untuk event ini.</div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Quantity + Seat Row -->
+                <div style="display:grid; grid-template-columns:{% if has_reserved_seating and seats %}1fr 1fr{% else %}1fr{% endif %}; gap:16px;">
+
+                    <!-- Quantity Stepper -->
+                    <div class="panel">
+                        <h3 style="margin:0 0 14px; font-size:15px;">Jumlah Tiket</h3>
+                        <div style="display:flex; align-items:center; gap:0; border:1px solid #e5e7eb; border-radius:10px; overflow:hidden; width:fit-content;">
+                            <button type="button" onclick="changeQty(-1)"
+                                    style="width:44px; height:44px; border:none; background:#f8fafc; color:#374151; font-size:20px; font-weight:700; cursor:pointer; border-right:1px solid #e5e7eb; padding:0;">−</button>
+                            <span id="qty-display" style="width:56px; text-align:center; font-size:20px; font-weight:700; color:#1a2035; display:inline-block;">1</span>
+                            <button type="button" onclick="changeQty(1)"
+                                    style="width:44px; height:44px; border:none; background:#f8fafc; color:#374151; font-size:20px; font-weight:700; cursor:pointer; border-left:1px solid #e5e7eb; padding:0;">+</button>
+                        </div>
+                        <input type="hidden" name="quantity" id="qty-input" value="1">
+                        <p style="font-size:12px; color:#9ca3af; margin:10px 0 0;">Max 10 tiket per transaksi</p>
+                    </div>
+
+                    {% if has_reserved_seating and seats %}
+                    <!-- Seat Grid -->
+                    <div class="panel">
+                        <h3 style="margin:0 0 12px; font-size:15px;">Pilih Kursi <span style="font-size:12px; color:#9ca3af; font-weight:400;">(opsional)</span></h3>
+                        <div style="display:flex; flex-wrap:wrap; gap:8px; max-height:160px; overflow-y:auto;">
+                            {% for seat in seats %}
+                            <label style="cursor:pointer;">
+                                <input type="radio" name="seat" value="{{ seat.seat_id }}"
+                                       style="display:none;" onchange="selectSeat(this)">
+                                <div class="seat-btn" style="width:46px; height:36px; border:1px solid #d1d5db; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#374151; background:#fff; cursor:pointer; transition:all .15s; user-select:none;">
+                                    {{ seat.section }}{{ seat.seat_number }}
+                                </div>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Promo Code -->
+                <div class="panel">
+                    <h3 style="margin:0 0 12px; font-size:15px;">Kode Promo</h3>
+                    <div style="display:flex; gap:8px;">
+                        <input type="text" id="promo-input" name="promo_code"
+                               placeholder="CONTOH: TIKTAK20"
+                               style="flex:1; text-transform:uppercase; letter-spacing:0.05em;"
+                               oninput="clearPromoState()">
+                        <button type="button" onclick="applyPromo()"
+                                style="white-space:nowrap; background:#f8fafc; border:1px solid #d1d5db; border-radius:8px; padding:0 16px; font-weight:700; font-size:13px; cursor:pointer; color:#374151; min-height:42px;">Terapkan</button>
+                    </div>
+                    <div id="promo-error" style="color:#b42318; font-size:13px; margin-top:6px; display:none;">Kode promo tidak valid.</div>
+                    <div id="promo-success" style="color:#166534; font-size:13px; margin-top:6px; display:none;"></div>
+                </div>
+
+            </div>
+
+            <!-- ============ RIGHT COLUMN — Order Summary ============ -->
+            <div>
+                <div class="panel" style="position:sticky; top:80px;">
+                    <h3 style="margin:0 0 16px; font-size:15px; font-weight:750;">Ringkasan Pesanan</h3>
+
+                    <div style="display:grid; gap:10px; margin-bottom:16px;">
+                        <div style="display:flex; justify-content:space-between; font-size:13px;">
+                            <span id="summary-cat-label" style="color:#6b7280;">Pilih kategori tiket</span>
+                            <span id="summary-subtotal" style="font-weight:600;">—</span>
+                        </div>
+                        <div id="promo-row" style="display:none; justify-content:space-between; font-size:13px;">
+                            <span id="summary-promo-label" style="color:#6b7280;">Diskon</span>
+                            <span id="summary-discount" style="font-weight:600; color:#16a34a;"></span>
+                        </div>
+                        <div style="border-top:1px solid #e5e7eb; padding-top:12px; display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-weight:750; font-size:15px;">Total</span>
+                            <span id="summary-total" style="font-weight:800; font-size:20px; color:#1a2035;">Rp 0</span>
+                        </div>
+                    </div>
+
+                    <button class="primary" type="submit" style="width:100%; min-height:48px; font-size:15px; font-weight:700; border-radius:10px; background:#2563eb; border-color:#2563eb;">
+                        Bayar Sekarang
+                    </button>
+                    <p style="font-size:12px; text-align:center; margin:10px 0 0; color:#9ca3af;">Konfirmasi tiket akan dikirim ke email Anda</p>
+                </div>
+            </div>
+
         </div>
     </form>
-</section>
+</div>
+
+<style>
+    .cat-card:hover { border-color:#93c5fd; background:#f8fbff; }
+    .cat-opt input:checked + .cat-card { border-color:#2563eb; background:#eff6ff; }
+    .cat-opt input:checked + .cat-card .cat-check { display:flex !important; }
+    .cat-opt input:checked + .cat-card .cat-price { color:#1d4ed8; }
+    .seat-btn.selected { background:#2563eb !important; color:#fff !important; border-color:#2563eb !important; }
+</style>
+
+<script>
+const PROMOS = {{ promotions_json|safe }};
+let activePromo = null;
+let selectedPrice = 0;
+let selectedCatName = '';
+
+function fmtRp(n) {
+    return 'Rp ' + Math.round(n).toLocaleString('id-ID');
+}
+
+function updateSummary() {
+    const qty = parseInt(document.getElementById('qty-input').value) || 1;
+    const subtotal = selectedPrice * qty;
+    let total = subtotal;
+    let discount = 0;
+
+    document.getElementById('summary-cat-label').textContent =
+        selectedPrice > 0 ? `${selectedCatName} × ${qty}` : 'Pilih kategori tiket';
+    document.getElementById('summary-subtotal').textContent =
+        selectedPrice > 0 ? fmtRp(subtotal) : '—';
+
+    if (activePromo && selectedPrice > 0) {
+        if (activePromo.type === 'PERCENTAGE') {
+            discount = subtotal * activePromo.value / 100;
+        } else {
+            discount = activePromo.value;
+        }
+        discount = Math.min(discount, subtotal);
+        total = subtotal - discount;
+        document.getElementById('promo-row').style.display = 'flex';
+        document.getElementById('summary-discount').textContent = '− ' + fmtRp(discount);
+    } else {
+        document.getElementById('promo-row').style.display = 'none';
+    }
+
+    document.getElementById('summary-total').textContent = fmtRp(total);
+}
+
+function onCatChange(input) {
+    selectedPrice = parseFloat(input.dataset.price) || 0;
+    selectedCatName = input.dataset.name || '';
+    updateSummary();
+}
+
+function changeQty(delta) {
+    const inp = document.getElementById('qty-input');
+    let val = parseInt(inp.value) || 1;
+    val = Math.max(1, Math.min(10, val + delta));
+    inp.value = val;
+    document.getElementById('qty-display').textContent = val;
+    updateSummary();
+}
+
+function selectSeat(radio) {
+    document.querySelectorAll('.seat-btn').forEach(b => b.classList.remove('selected'));
+    radio.closest('label').querySelector('.seat-btn').classList.add('selected');
+}
+
+function applyPromo() {
+    const code = document.getElementById('promo-input').value.trim().toUpperCase();
+    const errEl = document.getElementById('promo-error');
+    const okEl = document.getElementById('promo-success');
+
+    if (!code) {
+        activePromo = null;
+        errEl.style.display = 'none';
+        okEl.style.display = 'none';
+        updateSummary();
+        return;
+    }
+
+    const found = PROMOS.find(p => p.code.toUpperCase() === code);
+    if (!found) {
+        activePromo = null;
+        errEl.style.display = 'block';
+        okEl.style.display = 'none';
+    } else if (found.used >= found.limit) {
+        activePromo = null;
+        errEl.textContent = 'Kode promo sudah mencapai batas penggunaan.';
+        errEl.style.display = 'block';
+        okEl.style.display = 'none';
+    } else {
+        activePromo = found;
+        errEl.style.display = 'none';
+        const label = found.type === 'PERCENTAGE'
+            ? `Promo "${found.code}" diterapkan (${found.value}% off)`
+            : `Promo "${found.code}" diterapkan (Rp ${found.value.toLocaleString('id-ID')} off)`;
+        okEl.textContent = label;
+        okEl.style.display = 'block';
+    }
+    updateSummary();
+}
+
+function clearPromoState() {
+    if (activePromo) {
+        activePromo = null;
+        document.getElementById('promo-error').style.display = 'none';
+        document.getElementById('promo-success').style.display = 'none';
+        updateSummary();
+    }
+}
+</script>
+{% endif %}
 {% endblock %}

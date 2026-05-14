@@ -1,20 +1,46 @@
 {% extends "base.html" %}
 {% block title %}{% if action == "create" %}Tambah Artist{% else %}Update Artist{% endif %} | TikTakTuk{% endblock %}
 {% block content %}
-<section class="panel">
-    <h1>{% if action == "create" %}Tambah Artist{% else %}Update Artist{% endif %}</h1>
-    <form class="stack" method="post">
-        {% csrf_token %}
-        <label>Name
-            <input name="name" value="{{ artist.name|default:'' }}" required>
-        </label>
-        <label>Genre
-            <input name="genre" value="{{ artist.genre|default:'' }}">
-        </label>
-        <div class="actions">
-            <button class="primary" type="submit">{% if action == "create" %}Create{% else %}Update{% endif %}</button>
-            <a class="button secondary" href="{% url 'artist_list' %}">Cancel</a>
-        </div>
-    </form>
-</section>
+<div style="max-width:480px; margin:0 auto;">
+    <div style="margin-bottom:20px;">
+        <a href="{% url 'artist_list' %}" style="color:#6b7280; font-size:14px;">← Kembali ke Daftar Artist</a>
+    </div>
+
+    <div class="panel">
+        <h2 style="margin:0 0 20px;">
+            {% if action == "create" %}Tambah Artist Baru{% else %}Update Artist{% endif %}
+        </h2>
+
+        {% if action == "update" and artist.artist_id %}
+            <div style="margin-bottom:20px; padding:12px 14px; background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px;">
+                <div style="font-size:11px; color:#9ca3af; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:4px;">Artist ID</div>
+                <div style="font-weight:700; color:#374151; font-size:13px; font-family:monospace;">{{ artist.artist_id }}</div>
+            </div>
+        {% endif %}
+
+        <form class="stack" method="post">
+            {% csrf_token %}
+
+            <label>Name (Nama Artist) <span style="color:#b42318;">*</span>
+                <input name="name"
+                       value="{{ artist.name|default:'' }}"
+                       placeholder="cth. Tulus, Hindia, Fourtwnty"
+                       required>
+            </label>
+
+            <label>Genre <span style="color:#9ca3af; font-weight:400; font-size:12px;">(opsional)</span>
+                <input name="genre"
+                       value="{{ artist.genre|default:'' }}"
+                       placeholder="cth. Indie Pop, R&B, Folk">
+            </label>
+
+            <div class="actions" style="justify-content:flex-end; margin-top:8px;">
+                <a class="button secondary" href="{% url 'artist_list' %}">Cancel</a>
+                <button class="primary" type="submit">
+                    {% if action == "create" %}Create{% else %}Update{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}

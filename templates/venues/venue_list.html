@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Venue | TikTakTuk{% endblock %}
+{% block title %}{% if can_manage %}Manajemen Venue{% else %}Daftar Venue{% endif %} | TikTakTuk{% endblock %}
 {% block content %}
 <section class="page-head">
     <div>
@@ -7,40 +7,57 @@
         <p>Daftar venue beserta kapasitas dan lokasinya.</p>
     </div>
     {% if can_manage %}
-        <a class="button primary" href="{% url 'venue_create' %}">Tambah Venue</a>
+        <a class="button primary" href="{% url 'venue_create' %}">+ Tambah Venue</a>
     {% endif %}
 </section>
-<form class="filters" method="get">
-    <input name="q" value="{{ query }}" placeholder="Cari nama atau alamat venue">
+
+<form class="filters" method="get" style="grid-template-columns: minmax(220px,1fr) repeat(3, minmax(140px,max-content));">
+    <input name="q" value="{{ query }}" placeholder="Cari nama atau alamat venue...">
     <select name="city">
         <option value="">Semua Kota</option>
         {% for city in cities %}
             <option value="{{ city }}" {% if city_filter == city %}selected{% endif %}>{{ city }}</option>
         {% endfor %}
     </select>
+    <select name="seating">
+        <option value="">Semua Jenis Seating</option>
+        <option value="reserved" {% if seating_filter == "reserved" %}selected{% endif %}>Reserved Seating</option>
+        <option value="free" {% if seating_filter == "free" %}selected{% endif %}>Free Seating</option>
+    </select>
     <button class="primary" type="submit">Filter</button>
 </form>
+
 <section class="grid">
     {% for venue in venues %}
-        <article class="card">
-            <div>
-                <h2>{{ venue.venue_name }}</h2>
-                <div class="meta">
-                    <span>Venue ID: {{ venue.venue_id }}</span>
-                    <span>Alamat: {{ venue.address }}</span>
-                    <span>Kota: {{ venue.city }}</span>
-                    <span>Kapasitas: {{ venue.capacity }}</span>
+        <article class="card" style="gap: 0;">
+            <div style="padding: 4px 0 12px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+                    <h2 style="margin:0; font-size:17px;">{{ venue.venue_name }}</h2>
+                    {% if venue.has_reserved_seating %}
+                        <span class="chip" style="font-size:11px; padding: 0 8px; min-height:22px;">Reserved</span>
+                    {% else %}
+                        <span class="chip" style="font-size:11px; padding: 0 8px; min-height:22px; background:#f1f5f9; color:#64748b;">Free</span>
+                    {% endif %}
+                </div>
+                <div class="meta" style="font-size:13px;">
+                    <span>📍 {{ venue.address }}, {{ venue.city }}</span>
+                    <span>👥 Kapasitas: {{ venue.capacity }} kursi</span>
+                    <span style="color:{% if venue.has_reserved_seating %}#0f766e{% else %}#64748b{% endif %}; font-weight:700;">
+                        Jenis Seating: {% if venue.has_reserved_seating %}Reserved Seating{% else %}Free Seating{% endif %}
+                    </span>
                 </div>
             </div>
             {% if can_manage %}
-                <div class="actions">
-                    <a class="button secondary" href="{% url 'venue_update' venue.venue_id %}">Edit</a>
-                    <a class="button danger" href="{% url 'venue_delete' venue.venue_id %}">Hapus</a>
+                <div class="actions" style="padding-top:10px; border-top:1px solid #e5e7eb;">
+                    <a class="button secondary" style="font-size:13px; min-height:34px;" href="{% url 'venue_update' venue.venue_id %}">Edit</a>
+                    <a class="button danger" style="font-size:13px; min-height:34px;" href="{% url 'venue_delete' venue.venue_id %}">Hapus</a>
                 </div>
             {% endif %}
         </article>
     {% empty %}
-        <div class="panel">Belum ada venue yang sesuai.</div>
+        <div class="panel" style="grid-column:1/-1; text-align:center; color:#9ca3af;">
+            Belum ada venue yang sesuai dengan pencarian.
+        </div>
     {% endfor %}
 </section>
 {% endblock %}

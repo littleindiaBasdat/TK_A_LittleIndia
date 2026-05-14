@@ -1,26 +1,54 @@
 {% extends "base.html" %}
-{% block title %}{% if action == "create" %}Tambah Venue{% else %}Edit Venue{% endif %} | TikTakTuk{% endblock %}
+{% block title %}{% if action == "create" %}Tambah Venue Baru{% else %}Edit Venue{% endif %} | TikTakTuk{% endblock %}
 {% block content %}
-<section class="panel">
-    <h1>{% if action == "create" %}Tambah Venue{% else %}Edit Venue{% endif %}</h1>
-    <form class="stack" method="post">
-        {% csrf_token %}
-        <label>Nama Venue
-            <input name="venue_name" value="{{ venue.venue_name|default:'' }}" required>
-        </label>
-        <label>Alamat
-            <textarea name="address" required>{{ venue.address|default:'' }}</textarea>
-        </label>
-        <label>Kota
-            <input name="city" value="{{ venue.city|default:'' }}" required>
-        </label>
-        <label>Kapasitas
-            <input type="number" min="1" name="capacity" value="{{ venue.capacity|default:'' }}" required>
-        </label>
-        <div class="actions">
-            <button class="primary" type="submit">{% if action == "create" %}Tambah{% else %}Simpan{% endif %}</button>
-            <a class="button secondary" href="{% url 'venue_list' %}">Batal</a>
+<div style="max-width:560px; margin:0 auto;">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+        <a href="{% url 'venue_list' %}" style="color:#6b7280; font-size:14px;">← Kembali ke Daftar Venue</a>
+    </div>
+
+    <div class="panel">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+            <h2 style="margin:0;">{% if action == "create" %}Tambah Venue Baru{% else %}Edit Venue{% endif %}</h2>
         </div>
-    </form>
-</section>
+
+        <form class="stack" method="post">
+            {% csrf_token %}
+
+            <label>Nama Venue (VENUE_NAME)
+                <input name="venue_name" value="{{ venue.venue_name|default:'' }}"
+                       placeholder="cth. Jakarta Convention Center" required>
+            </label>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+                <label>Kapasitas (CAPACITY)
+                    <input type="number" min="1" name="capacity"
+                           value="{{ venue.capacity|default:'' }}"
+                           placeholder="1000" required>
+                </label>
+                <label>Kota (CITY)
+                    <input name="city" value="{{ venue.city|default:'' }}"
+                           placeholder="Jakarta" required>
+                </label>
+            </div>
+
+            <label>Alamat (ADDRESS)
+                <textarea name="address" placeholder="Jl. Gatot Subroto No.1" required>{{ venue.address|default:'' }}</textarea>
+            </label>
+
+            <label style="flex-direction:row; align-items:center; gap:10px; cursor:pointer; font-size:14px; font-weight:600; color:#374151;">
+                <input type="checkbox" name="has_reserved_seating"
+                       style="width:18px; height:18px; min-height:unset; cursor:pointer;"
+                       {% if venue.has_reserved_seating %}checked{% endif %}>
+                Has Reserved Seating
+            </label>
+
+            <div class="actions" style="justify-content:flex-end; margin-top:8px;">
+                <a class="button secondary" href="{% url 'venue_list' %}">Batal</a>
+                <button class="primary" type="submit">
+                    {% if action == "create" %}Tambah{% else %}Simpan{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}

@@ -1,14 +1,19 @@
 {% extends "base.html" %}
 {% block title %}Delete Kursi | TikTakTuk{% endblock %}
 {% block content %}
-<section class="panel">
-    <h1>Delete Kursi</h1>
-    {# FIX: venue_name (dari join), seat_number & row_number (nama kolom DB) #}
-    <p>Anda yakin ingin menghapus kursi <strong>{{ seat.venue_name }}</strong> - Section {{ seat.section }}, Baris {{ seat.row_number }}, No. {{ seat.seat_number }}?</p>
-    <form class="actions" method="post">
-        {% csrf_token %}
-        <button class="danger" type="submit">Hapus</button>
-        <a class="button secondary" href="{% url 'seat_list' %}">Batal</a>
-    </form>
+<section class="modal-backdrop">
+    <div class="modal">
+        <div class="modal-header">
+            <h1 class="modal-title" style="color: var(--danger);">Hapus Kursi</h1>
+            <a class="modal-close" href="{% url 'seat_list' %}">x</a>
+        </div>
+        {# FIX: venue_name (dari join), seat_number & row_number (nama kolom DB) #}
+        <p>Anda yakin ingin menghapus kursi <strong>{{ seat.venue_name }}</strong> - Section {{ seat.section }}, Baris {{ seat.row_number }}, No. {{ seat.seat_number }}?</p>
+        <form class="actions" method="post">
+            {% csrf_token %}
+            <a class="button secondary" href="{% url 'seat_list' %}">Batal</a>
+            <button class="danger" type="submit">Hapus</button>
+        </form>
+    </div>
 </section>
 {% endblock %}

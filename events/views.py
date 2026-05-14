@@ -17,7 +17,7 @@ def _get_organizer_id(user_id):
 
 
 def _fetch_event_with_relations(events):
-    """Add 'artists' and 'categories' list to each event dict."""
+    """Attach artists and ticket_categories lists to each event dict."""
     if not events:
         return events
     event_ids = [e['event_id'] for e in events]
@@ -28,7 +28,8 @@ def _fetch_event_with_relations(events):
             f"""SELECT ea.event_id, a.name, ea.role
                 FROM event_artist ea
                 JOIN artist a ON ea.artist_id = a.artist_id
-                WHERE ea.event_id IN ({placeholders})""",
+                WHERE ea.event_id IN ({placeholders})
+                ORDER BY a.name""",
             event_ids
         )
         artists_by_event = {}
@@ -37,15 +38,20 @@ def _fetch_event_with_relations(events):
 
     with connection.cursor() as cursor:
         cursor.execute(
-            f"""SELECT event_id, category_name, price
+            f"""SELECT event_id, category_id, category_name, price, quota
                 FROM ticket_category
                 WHERE event_id IN ({placeholders})
                 ORDER BY price""",
             event_ids
         )
         categories_by_event = {}
-        for ev_id, cname, price in cursor.fetchall():
-            categories_by_event.setdefault(ev_id, []).append({'name': cname, 'price': price})
+        for ev_id, cat_id, cname, price, quota in cursor.fetchall():
+            categories_by_event.setdefault(ev_id, []).append({
+                'category_id': cat_id,
+                'name': cname,
+                'price': price,
+                'quota': quota,
+            })
 
     for e in events:
         e['artists'] = artists_by_event.get(e['event_id'], [])
@@ -56,13 +62,12 @@ def _fetch_event_with_relations(events):
 
 @raw_sql_login_required
 def event_list_view(request):
-    """For Admin & Organizer ('Event Saya' page)."""
     if not can_manage(request.user):
         messages.error(request, 'Hanya admin atau organizer yang dapat mengakses halaman ini.')
         return redirect('dashboard')
 
     sql = """
-        SELECT e.event_id, e.event_title, e.event_datetime,
+        SELECT e.event_id, e.event_title, e.event_datetime, e.description,
                v.venue_name, v.city,
                o.organizer_name
         FROM event e
@@ -92,13 +97,12 @@ def event_list_view(request):
 
 
 def event_browse_view(request):
-    """For Customers & all users ('Cari Event' page)."""
     query = request.GET.get('q', '').strip()
     venue_filter = request.GET.get('venue', '').strip()
     artist_filter = request.GET.get('artist', '').strip()
 
     sql = """
-        SELECT DISTINCT e.event_id, e.event_title, e.event_datetime,
+        SELECT DISTINCT e.event_id, e.event_title, e.event_datetime, e.description,
                v.venue_name, v.city,
                o.organizer_name
         FROM event e
@@ -160,15 +164,23 @@ def event_create_view(request):
 
     if request.method == 'POST':
         event_title = request.POST.get('event_title', '').strip()
-        event_datetime = request.POST.get('event_datetime', '').strip()
+        event_date = request.POST.get('event_date', '').strip()
+        event_time = request.POST.get('event_time', '').strip()
         venue_id = request.POST.get('venue', '').strip()
         organizer_id = request.POST.get('organizer', '').strip()
+        description = request.POST.get('description', '').strip()
         artist_ids = request.POST.getlist('artists')
+        cat_ids = request.POST.getlist('cat_id')
+        cat_names = request.POST.getlist('cat_name')
+        cat_prices = request.POST.getlist('cat_price')
+        cat_quotas = request.POST.getlist('cat_quota')
 
         if request.user.role == 'organizer':
-            organizer_id = _get_organizer_id(str(request.user.id))
+            organizer_id = str(_get_organizer_id(str(request.user.id)))
 
-        error = _validate_event(event_title, event_datetime, venue_id, organizer_id)
+        event_datetime = f"{event_date} {event_time}:00" if event_date and event_time else ''
+
+        error = _validate_event(event_title, event_date, event_time, venue_id, organizer_id)
         if error:
             messages.error(request, error)
         else:
@@ -176,18 +188,26 @@ def event_create_view(request):
             try:
                 with connection.cursor() as cursor:
                     cursor.execute(
-                        """INSERT INTO event (event_id, event_title, event_datetime, venue_id, organizer_id)
-                           VALUES (%s, %s, %s, %s, %s)""",
-                        [event_id, event_title, event_datetime, venue_id, organizer_id]
+                        """INSERT INTO event
+                               (event_id, event_title, event_datetime, venue_id, organizer_id, description)
+                           VALUES (%s, %s, %s, %s, %s, %s)""",
+                        [event_id, event_title, event_datetime, venue_id, organizer_id, description or None]
                     )
-                    # TODO: Ammar (Trigger 3.1) - validasi duplikasi (event_id, artist_id)
-                    # & eksistensi artist/event akan di-handle oleh trigger BEFORE INSERT
-                    # ON event_artist. Pesan error trigger akan ditangkap di except di bawah.
                     for aid in artist_ids:
-                        cursor.execute(
-                            "INSERT INTO event_artist (event_id, artist_id, role) VALUES (%s, %s, %s)",
-                            [event_id, aid, 'Performer']
-                        )
+                        if aid:
+                            cursor.execute(
+                                "INSERT INTO event_artist (event_id, artist_id, role) VALUES (%s, %s, %s)",
+                                [event_id, aid, 'Performer']
+                            )
+                    for cat_name, cat_price, cat_quota in zip(cat_names, cat_prices, cat_quotas):
+                        cat_name = cat_name.strip()
+                        if cat_name and cat_price and cat_quota:
+                            cursor.execute(
+                                """INSERT INTO ticket_category
+                                       (category_id, category_name, quota, price, event_id)
+                                   VALUES (%s, %s, %s, %s, %s)""",
+                                [str(uuid.uuid4()), cat_name, int(cat_quota), float(cat_price), event_id]
+                            )
             except Exception as exc:
                 messages.error(request, str(exc))
                 return render(request, 'events/event_form.html', {
@@ -212,10 +232,15 @@ def event_update_view(request, pk):
         messages.error(request, 'Hanya admin atau organizer yang dapat mengubah event.')
         return redirect('event_list')
 
-    fetch_sql = "SELECT * FROM event WHERE event_id = %s"
+    fetch_sql = """
+        SELECT e.event_id, e.event_title, e.event_datetime, e.description,
+               e.venue_id, e.organizer_id
+        FROM event e
+        WHERE e.event_id = %s
+    """
     fetch_params = [pk]
     if request.user.role == 'organizer':
-        fetch_sql += " AND organizer_id IN (SELECT organizer_id FROM organizer WHERE user_id = %s)"
+        fetch_sql += " AND e.organizer_id IN (SELECT organizer_id FROM organizer WHERE user_id = %s)"
         fetch_params.append(str(request.user.id))
 
     with connection.cursor() as cursor:
@@ -231,44 +256,107 @@ def event_update_view(request, pk):
         cursor.execute("SELECT artist_id FROM event_artist WHERE event_id = %s", [pk])
         existing_artist_ids = [str(r[0]) for r in cursor.fetchall()]
 
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """SELECT category_id, category_name, price, quota
+               FROM ticket_category WHERE event_id = %s ORDER BY price""",
+            [pk]
+        )
+        existing_categories = [
+            dict(zip(['category_id', 'category_name', 'price', 'quota'], r))
+            for r in cursor.fetchall()
+        ]
+
     venues, organizers, artists = _fetch_form_options(request.user)
 
     if request.method == 'POST':
         event_title = request.POST.get('event_title', '').strip()
-        event_datetime = request.POST.get('event_datetime', '').strip()
+        event_date = request.POST.get('event_date', '').strip()
+        event_time = request.POST.get('event_time', '').strip()
         venue_id = request.POST.get('venue', '').strip()
         organizer_id = request.POST.get('organizer', '').strip()
+        description = request.POST.get('description', '').strip()
         artist_ids = request.POST.getlist('artists')
+        cat_ids = request.POST.getlist('cat_id')
+        cat_names = request.POST.getlist('cat_name')
+        cat_prices = request.POST.getlist('cat_price')
+        cat_quotas = request.POST.getlist('cat_quota')
 
         if request.user.role == 'organizer':
             organizer_id = str(event['organizer_id'])
 
-        error = _validate_event(event_title, event_datetime, venue_id, organizer_id)
+        event_datetime = f"{event_date} {event_time}:00" if event_date and event_time else ''
+
+        error = _validate_event(event_title, event_date, event_time, venue_id, organizer_id)
         if error:
             messages.error(request, error)
         else:
             try:
                 with connection.cursor() as cursor:
                     cursor.execute(
-                        """UPDATE event SET event_title = %s, event_datetime = %s,
-                                            venue_id = %s, organizer_id = %s
+                        """UPDATE event
+                           SET event_title = %s, event_datetime = %s,
+                               venue_id = %s, organizer_id = %s, description = %s
                            WHERE event_id = %s""",
-                        [event_title, event_datetime, venue_id, organizer_id, pk]
+                        [event_title, event_datetime, venue_id, organizer_id, description or None, pk]
                     )
+
+                    # Sync artists
                     cursor.execute("DELETE FROM event_artist WHERE event_id = %s", [pk])
-                    # TODO: Ammar (Trigger 3.1) - validasi duplikasi (event_id, artist_id)
-                    # & eksistensi artist/event di-handle oleh trigger BEFORE INSERT ON event_artist.
                     for aid in artist_ids:
+                        if aid:
+                            cursor.execute(
+                                "INSERT INTO event_artist (event_id, artist_id, role) VALUES (%s, %s, %s)",
+                                [pk, aid, 'Performer']
+                            )
+
+                    # Sync ticket categories:
+                    # - submitted with cat_id → UPDATE existing
+                    # - submitted without cat_id → INSERT new
+                    # - existing not submitted → DELETE (only if no tickets reference them)
+                    existing_id_set = {str(c['category_id']) for c in existing_categories}
+                    submitted_id_set = {cid for cid in cat_ids if cid}
+
+                    for cid in existing_id_set - submitted_id_set:
                         cursor.execute(
-                            "INSERT INTO event_artist (event_id, artist_id, role) VALUES (%s, %s, %s)",
-                            [pk, aid, 'Performer']
+                            """DELETE FROM ticket_category
+                               WHERE category_id = %s
+                               AND NOT EXISTS (SELECT 1 FROM ticket WHERE category_id = %s)""",
+                            [cid, cid]
                         )
+
+                    for cat_id, cat_name, cat_price, cat_quota in zip(
+                        cat_ids, cat_names, cat_prices, cat_quotas
+                    ):
+                        cat_name = cat_name.strip()
+                        if not (cat_name and cat_price and cat_quota):
+                            continue
+                        try:
+                            quota = int(cat_quota)
+                            price = float(cat_price)
+                        except ValueError:
+                            continue
+                        if cat_id:
+                            cursor.execute(
+                                """UPDATE ticket_category
+                                   SET category_name = %s, price = %s, quota = %s
+                                   WHERE category_id = %s""",
+                                [cat_name, price, quota, cat_id]
+                            )
+                        else:
+                            cursor.execute(
+                                """INSERT INTO ticket_category
+                                       (category_id, category_name, quota, price, event_id)
+                                   VALUES (%s, %s, %s, %s, %s)""",
+                                [str(uuid.uuid4()), cat_name, quota, price, pk]
+                            )
+
             except Exception as exc:
                 messages.error(request, str(exc))
                 return render(request, 'events/event_form.html', {
                     'event': event, 'venues': venues, 'organizers': organizers,
                     'artists': artists, 'existing_artist_ids': existing_artist_ids,
-                    'action': 'update',
+                    'existing_categories': existing_categories, 'action': 'update',
                 })
 
             messages.success(request, 'Event berhasil diperbarui.')
@@ -280,6 +368,7 @@ def event_update_view(request, pk):
         'organizers': organizers,
         'artists': artists,
         'existing_artist_ids': existing_artist_ids,
+        'existing_categories': existing_categories,
         'action': 'update',
     })
 
@@ -301,7 +390,13 @@ def _fetch_form_options(user):
     return venues, organizers, artists
 
 
-def _validate_event(event_title, event_datetime, venue_id, organizer_id):
-    if not all([event_title, event_datetime, venue_id, organizer_id]):
-        return 'Semua field wajib diisi (judul, tanggal/waktu, venue, organizer).'
+def _validate_event(event_title, event_date, event_time, venue_id, organizer_id):
+    if not event_title:
+        return 'Judul acara wajib diisi.'
+    if not event_date or not event_time:
+        return 'Tanggal dan waktu acara wajib diisi.'
+    if not venue_id:
+        return 'Venue wajib dipilih.'
+    if not organizer_id:
+        return 'Organizer wajib dipilih.'
     return None

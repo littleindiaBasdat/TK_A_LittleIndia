@@ -7,7 +7,7 @@
         <p>Daftar kursi beserta status ketersediaannya.</p>
     </div>
     {% if can_manage %}
-        <a class="button primary" href="{% url 'seat_create' %}">Tambah Kursi</a>
+        <button class="button primary" type="button" data-open-seat-modal="create">Tambah Kursi</button>
     {% endif %}
 </section>
 <section class="stats">
@@ -60,12 +60,29 @@
                 {% if can_manage %}
                     <td>
                         <div class="actions">
-                            <a class="button secondary" href="{% url 'seat_update' seat.seat_id %}">Update</a>
+                            <button class="button secondary" type="button"
+                                data-open-seat-modal="update"
+                                data-seat-id="{{ seat.seat_id }}"
+                                data-venue-id="{{ seat.venue_id }}"
+                                data-section="{{ seat.section }}"
+                                data-row="{{ seat.row_number }}"
+                                data-number="{{ seat.seat_number }}"
+                                data-venue-name="{{ seat.venue_name }}">
+                                Update
+                            </button>
                             {% if seat.is_filled %}
                                 <span class="button secondary" title="Kursi ini sudah di-assign ke tiket dan tidak dapat dihapus. Hapus atau ubah tiket terlebih dahulu." style="opacity:.55;cursor:not-allowed;">Delete</span>
                                 <small style="color:#b42318;">Kursi ini sudah di-assign ke tiket dan tidak dapat dihapus. Hapus atau ubah tiket terlebih dahulu.</small>
                             {% else %}
-                                <a class="button danger" href="{% url 'seat_delete' seat.seat_id %}">Delete</a>
+                                <button class="button danger" type="button"
+                                    data-open-seat-modal="delete"
+                                    data-seat-id="{{ seat.seat_id }}"
+                                    data-section="{{ seat.section }}"
+                                    data-row="{{ seat.row_number }}"
+                                    data-number="{{ seat.seat_number }}"
+                                    data-venue-name="{{ seat.venue_name }}">
+                                    Delete
+                                </button>
                             {% endif %}
                         </div>
                     </td>
@@ -78,4 +95,139 @@
         {% endfor %}
     </tbody>
 </table>
+{% if can_manage %}
+<section class="modal-backdrop" id="seatModal" style="display:none;">
+    <div class="modal">
+        <div class="modal-header">
+            <h1 class="modal-title" id="seatModalTitle">Tambah Kursi Baru</h1>
+            <button class="modal-close" type="button" data-close-seat-modal>x</button>
+        </div>
+        <form class="stack" method="post" id="seatModalForm">
+            {% csrf_token %}
+            <label>Venue
+                <select name="venue" id="seatVenue" required>
+                    <option value="">Pilih venue</option>
+                    {% for venue in venues %}
+                        <option value="{{ venue.venue_id }}">{{ venue.venue_name }} - {{ venue.city }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>Section
+                <input name="section" id="seatSection" required>
+            </label>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                <label>Baris
+                    <input name="row_number" id="seatRow" required>
+                </label>
+                <label>No. Kursi
+                    <input name="seat_number" id="seatNumber" required>
+                </label>
+            </div>
+            <div class="actions">
+                <button class="primary" type="submit" id="seatModalSubmit">Tambah</button>
+                <button class="button secondary" type="button" data-close-seat-modal>Batal</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<section class="modal-backdrop" id="seatDeleteModal" style="display:none;">
+    <div class="modal">
+        <div class="modal-header">
+            <h1 class="modal-title" style="color: var(--danger);">Hapus Kursi</h1>
+            <button class="modal-close" type="button" data-close-seat-modal>x</button>
+        </div>
+        <p id="seatDeleteText">Anda yakin ingin menghapus kursi?</p>
+        <form class="actions" method="post" id="seatDeleteForm">
+            {% csrf_token %}
+            <button class="button secondary" type="button" data-close-seat-modal>Batal</button>
+            <button class="danger" type="submit">Hapus</button>
+        </form>
+    </div>
+</section>
+
+<script>
+    (function () {
+        var seatModal = document.getElementById('seatModal');
+        var seatDeleteModal = document.getElementById('seatDeleteModal');
+        var seatModalTitle = document.getElementById('seatModalTitle');
+        var seatModalForm = document.getElementById('seatModalForm');
+        var seatModalSubmit = document.getElementById('seatModalSubmit');
+        var seatVenue = document.getElementById('seatVenue');
+        var seatSection = document.getElementById('seatSection');
+        var seatRow = document.getElementById('seatRow');
+        var seatNumber = document.getElementById('seatNumber');
+        var seatDeleteText = document.getElementById('seatDeleteText');
+        var seatDeleteForm = document.getElementById('seatDeleteForm');
+
+        function openSeatModal(mode, data) {
+            if (!seatModal) return;
+            seatModal.style.display = 'grid';
+            if (mode === 'create') {
+                seatModalTitle.textContent = 'Tambah Kursi Baru';
+                seatModalSubmit.textContent = 'Tambah';
+                seatModalForm.action = "{% url 'seat_create' %}";
+                seatVenue.value = '';
+                seatSection.value = '';
+                seatRow.value = '';
+                seatNumber.value = '';
+            } else {
+                seatModalTitle.textContent = 'Edit Kursi';
+                seatModalSubmit.textContent = 'Simpan';
+                seatModalForm.action = data.action;
+                seatVenue.value = data.venueId || '';
+                seatSection.value = data.section || '';
+                seatRow.value = data.row || '';
+                seatNumber.value = data.number || '';
+            }
+        }
+
+        function openDeleteModal(data) {
+            if (!seatDeleteModal) return;
+            seatDeleteModal.style.display = 'grid';
+            seatDeleteForm.action = data.action;
+            seatDeleteText.textContent = 'Apakah Anda yakin ingin menghapus kursi ' + data.venueName +
+                ' - Section ' + data.section + ', Baris ' + data.row + ', No. ' + data.number + '?';
+        }
+
+        function closeModals() {
+            if (seatModal) seatModal.style.display = 'none';
+            if (seatDeleteModal) seatDeleteModal.style.display = 'none';
+        }
+
+        document.querySelectorAll('[data-open-seat-modal]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var mode = btn.getAttribute('data-open-seat-modal');
+                if (mode === 'create') {
+                    openSeatModal('create', {});
+                    return;
+                }
+                if (mode === 'update') {
+                    openSeatModal('update', {
+                        action: '/seats/' + btn.getAttribute('data-seat-id') + '/edit/',
+                        venueId: btn.getAttribute('data-venue-id'),
+                        section: btn.getAttribute('data-section'),
+                        row: btn.getAttribute('data-row'),
+                        number: btn.getAttribute('data-number')
+                    });
+                    return;
+                }
+                if (mode === 'delete') {
+                    openDeleteModal({
+                        action: '/seats/' + btn.getAttribute('data-seat-id') + '/hapus/',
+                        venueName: btn.getAttribute('data-venue-name') || '-',
+                        section: btn.getAttribute('data-section') || '-',
+                        row: btn.getAttribute('data-row') || '-',
+                        number: btn.getAttribute('data-number') || '-'
+                    });
+                }
+            });
+        });
+
+        document.querySelectorAll('[data-close-seat-modal]').forEach(function (btn) {
+            btn.addEventListener('click', closeModals);
+        });
+    })();
+</script>
+{% endif %}
 {% endblock %}
