@@ -1,32 +1,281 @@
 {% extends "base.html" %}
 {% block title %}Dashboard | TikTakTuk{% endblock %}
 {% block content %}
-<section class="page-head">
+
+{% if user_role == 'admin' %}
+<!-- ================================================================ -->
+<!-- ADMIN DASHBOARD                                                    -->
+<!-- ================================================================ -->
+
+<!-- Header Card -->
+<div style="background:#1a2035; border-radius:16px; padding:32px 36px; margin-bottom:24px; display:flex; align-items:flex-start; justify-content:space-between; gap:20px;">
     <div>
-        <h1>Dashboard {% if user_role == "admin" %}Admin{% elif user_role == "organizer" %}Organizer{% else %}Customer{% endif %}</h1>
-        <p>Profil dan ringkasan aktivitas Anda di TikTakTuk.</p>
+        <div style="font-size:12px; color:#9ca3af; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:10px;">Administrator</div>
+        <h1 style="margin:0 0 6px; font-size:30px; color:#ffffff; letter-spacing:0;">System Console</h1>
+        <p style="margin:0; color:#9ca3af; font-size:14px;">Pantau dan kelola platform TikTakTuk</p>
     </div>
-    <div class="actions">
-        <a class="button secondary" href="{% url 'profile_edit' %}">Edit Profil</a>
-        <a class="button secondary" href="{% url 'password_update' %}">Update Password</a>
-        <a class="button secondary" href="{% url 'logout' %}">Logout</a>
-    </div>
-</section>
+    <a href="{% url 'promotion_list' %}" style="background:#ffffff; color:#1a2035; padding:10px 22px; border-radius:8px; font-weight:700; font-size:14px; text-decoration:none; white-space:nowrap; flex-shrink:0; align-self:center;">Promosi</a>
+</div>
 
-<section class="stats">
-    {% for label, value in stats %}
-        <div class="stat"><span>{{ label }}</span><strong>{{ value }}</strong></div>
-    {% endfor %}
-</section>
-
-<section class="panel">
-    <h2>Informasi Akun</h2>
-    <div class="meta">
-        <span>Username: {{ user.username }}</span>
-        <span>Role: {{ user_role|title }}</span>
-        {% if profile.id_label %}<span>{{ profile.id_label }}: {{ profile.id_value }}</span>{% endif %}
-        {% if profile.name_label %}<span>{{ profile.name_label }}: {{ profile.name_value }}</span>{% endif %}
-        {% if profile.extra_label %}<span>{{ profile.extra_label }}: {{ profile.extra_value }}</span>{% endif %}
+<!-- 4 Stat Cards -->
+<div style="display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px;">
+    <div class="panel" style="padding:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="font-size:11px; font-weight:700; color:#9ca3af; letter-spacing:0.06em; text-transform:uppercase;">Total Pengguna</div>
+            <span style="font-size:22px;">👥</span>
+        </div>
+        <div style="font-size:32px; font-weight:800; color:#1a2035; margin:10px 0 4px;">{{ total_users }}</div>
+        <div style="font-size:13px; color:#9ca3af;">Pengguna aktif</div>
     </div>
-</section>
+    <div class="panel" style="padding:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="font-size:11px; font-weight:700; color:#9ca3af; letter-spacing:0.06em; text-transform:uppercase;">Total Acara</div>
+            <span style="font-size:22px;">🗓️</span>
+        </div>
+        <div style="font-size:32px; font-weight:800; color:#1a2035; margin:10px 0 4px;">{{ total_events_month }}</div>
+        <div style="font-size:13px; color:#9ca3af;">Bulan ini</div>
+    </div>
+    <div class="panel" style="padding:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="font-size:11px; font-weight:700; color:#9ca3af; letter-spacing:0.06em; text-transform:uppercase;">Omzet Platform</div>
+            <span style="font-size:22px;">📈</span>
+        </div>
+        <div style="font-size:28px; font-weight:800; color:#1a2035; margin:10px 0 4px;">{{ omzet }}</div>
+        <div style="font-size:13px; color:#9ca3af;">Gross volume</div>
+    </div>
+    <div class="panel" style="padding:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="font-size:11px; font-weight:700; color:#9ca3af; letter-spacing:0.06em; text-transform:uppercase;">Promosi Aktif</div>
+            <span style="font-size:22px;">🎟️</span>
+        </div>
+        <div style="font-size:32px; font-weight:800; color:#1a2035; margin:10px 0 4px;">{{ active_promos }}</div>
+        <div style="font-size:13px; color:#9ca3af;">Running campaigns</div>
+    </div>
+</div>
+
+<!-- 2-column Info Panels -->
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+    <!-- Infrastruktur Venue -->
+    <div class="panel">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+            <h2 style="margin:0; font-size:16px;">Infrastruktur Venue</h2>
+            <span style="font-size:16px; color:#9ca3af;">↗</span>
+        </div>
+        <div style="display:grid; gap:12px; margin-bottom:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:14px;">
+                <span style="color:#6b7280;">Total Venue Terdaftar</span>
+                <span style="font-weight:700; color:#1a2035;">{{ total_venues }} Lokasi</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:14px;">
+                <span style="color:#6b7280;">Reserved Seating</span>
+                <span style="font-weight:700; color:#1a2035;">{{ reserved_venues }} Venue</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:14px;">
+                <span style="color:#6b7280;">Kapasitas Terbesar</span>
+                <span style="font-weight:700; color:#1a2035;">{{ max_capacity }} Kursi</span>
+            </div>
+        </div>
+        <a href="{% url 'venue_list' %}" class="button secondary" style="width:100%; justify-content:center; font-size:14px;">Kelola Venue</a>
+    </div>
+
+    <!-- Marketing & Promosi -->
+    <div class="panel">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+            <h2 style="margin:0; font-size:16px;">Marketing &amp; Promosi</h2>
+            <span style="font-size:16px; color:#9ca3af;">↗</span>
+        </div>
+        <div style="display:grid; gap:12px; margin-bottom:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:14px;">
+                <span style="color:#6b7280;">Promo Persentase</span>
+                <span style="font-weight:700; color:#1a2035;">{{ promo_percentage }} Aktif</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:14px;">
+                <span style="color:#6b7280;">Promo Potongan Nominal</span>
+                <span style="font-weight:700; color:#1a2035;">{{ promo_nominal }} Aktif</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:14px;">
+                <span style="color:#6b7280;">Total Penggunaan</span>
+                <span style="font-weight:700; color:#1a2035;">{{ total_promo_usage }} Kali</span>
+            </div>
+        </div>
+        <a href="{% url 'promotion_list' %}" class="button secondary" style="width:100%; justify-content:center; font-size:14px;">Kelola Promosi</a>
+    </div>
+</div>
+
+{% elif user_role == 'organizer' %}
+<!-- ================================================================ -->
+<!-- ORGANIZER DASHBOARD                                                -->
+<!-- ================================================================ -->
+
+<!-- Header Card -->
+<div style="background:#1a2035; border-radius:16px; padding:32px 36px; margin-bottom:24px; display:flex; align-items:flex-start; justify-content:space-between; gap:20px;">
+    <div>
+        <div style="font-size:12px; color:#9ca3af; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:10px;">Dashboard Penyelenggara</div>
+        <h1 style="margin:0 0 6px; font-size:30px; color:#ffffff; letter-spacing:0;">{{ organizer_name }}</h1>
+        <p style="margin:0; color:#9ca3af; font-size:14px;">Kelola {{ active_events }} acara aktif Anda</p>
+    </div>
+    <div style="display:flex; gap:10px; align-self:center; flex-shrink:0;">
+        <a href="{% url 'event_list' %}" style="background:#ffffff; color:#1a2035; padding:10px 18px; border-radius:8px; font-weight:700; font-size:14px; text-decoration:none; white-space:nowrap;">Kelola Acara</a>
+        <a href="{% url 'venue_list' %}" style="background:transparent; border:1px solid rgba(255,255,255,0.4); color:#ffffff; padding:10px 18px; border-radius:8px; font-weight:700; font-size:14px; text-decoration:none; white-space:nowrap;">Venue</a>
+    </div>
+</div>
+
+<!-- 4 Stat Cards -->
+<div style="display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px;">
+    <div class="panel" style="padding:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="font-size:11px; font-weight:700; color:#9ca3af; letter-spacing:0.06em; text-transform:uppercase;">Acara Aktif</div>
+            <span style="font-size:22px;">🗓️</span>
+        </div>
+        <div style="font-size:36px; font-weight:800; color:#1a2035; margin:10px 0 4px;">{{ active_events }}</div>
+        <div style="font-size:13px; color:#9ca3af;">Dalam koordinasi</div>
+    </div>
+    <div class="panel" style="padding:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="font-size:11px; font-weight:700; color:#9ca3af; letter-spacing:0.06em; text-transform:uppercase;">Tiket Terjual</div>
+            <span style="font-size:22px;">🎟️</span>
+        </div>
+        <div style="font-size:36px; font-weight:800; color:#1a2035; margin:10px 0 4px;">{{ tickets_sold }}</div>
+        <div style="font-size:13px; color:#9ca3af;">Total terjual</div>
+    </div>
+    <div class="panel" style="padding:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="font-size:11px; font-weight:700; color:#9ca3af; letter-spacing:0.06em; text-transform:uppercase;">Revenue</div>
+            <span style="font-size:22px;">📈</span>
+        </div>
+        <div style="font-size:28px; font-weight:800; color:#1a2035; margin:10px 0 4px;">{{ revenue }}</div>
+        <div style="font-size:13px; color:#9ca3af;">Bulan ini</div>
+    </div>
+    <div class="panel" style="padding:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="font-size:11px; font-weight:700; color:#9ca3af; letter-spacing:0.06em; text-transform:uppercase;">Venue Mitra</div>
+            <span style="font-size:22px;">📍</span>
+        </div>
+        <div style="font-size:36px; font-weight:800; color:#1a2035; margin:10px 0 4px;">{{ venue_count }}</div>
+        <div style="font-size:13px; color:#9ca3af;">Lokasi aktif</div>
+    </div>
+</div>
+
+<!-- Performa Acara -->
+<div class="panel">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+        <div>
+            <h2 style="margin:0 0 4px; font-size:16px;">Performa Acara</h2>
+            <p style="margin:0; font-size:13px;">Status acara yang Anda kelola</p>
+        </div>
+        <a href="{% url 'event_list' %}" style="color:#2563eb; font-size:14px; font-weight:700;">Lihat Semua</a>
+    </div>
+    <div style="margin-top:16px; display:grid; gap:2px;">
+        {% for ev in performa_events %}
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 0; border-bottom:1px solid #f1f5f9;">
+                <div>
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                        <span style="font-weight:700; font-size:15px;">{{ ev.title }}</span>
+                        {% if ev.status == 'LIVE' %}
+                            <span style="background:#dcfce7; color:#166534; font-size:11px; font-weight:700; padding:2px 8px; border-radius:99px;">LIVE</span>
+                        {% else %}
+                            <span style="background:#f1f5f9; color:#64748b; font-size:11px; font-weight:700; padding:2px 8px; border-radius:99px;">ENDED</span>
+                        {% endif %}
+                    </div>
+                    <div style="font-size:13px; color:#9ca3af; display:flex; gap:12px;">
+                        <span>📈 {{ ev.pct }}% terjual</span>
+                        <span>📍 {{ ev.venue_name }}, {{ ev.city }}</span>
+                    </div>
+                </div>
+                <span style="color:#d1d5db; font-size:18px;">›</span>
+            </div>
+        {% empty %}
+            <p style="color:#9ca3af; text-align:center; padding:20px 0;">Belum ada acara.</p>
+        {% endfor %}
+    </div>
+</div>
+
+{% else %}
+<!-- ================================================================ -->
+<!-- CUSTOMER DASHBOARD                                                 -->
+<!-- ================================================================ -->
+
+<!-- Header Card -->
+<div style="background:#2563eb; border-radius:16px; padding:32px 36px; margin-bottom:24px; display:flex; align-items:flex-start; justify-content:space-between; gap:20px;">
+    <div>
+        <div style="font-size:12px; color:#bfdbfe; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:10px;">Selamat datang kembali</div>
+        <h1 style="margin:0 0 6px; font-size:30px; color:#ffffff; letter-spacing:0;">{{ customer_name }}</h1>
+        <p style="margin:0; color:#bfdbfe; font-size:14px;">{{ upcoming_count }} acara menarik menunggu Anda</p>
+    </div>
+    <a href="{% url 'event_browse' %}" style="background:#ffffff; color:#2563eb; padding:10px 22px; border-radius:8px; font-weight:700; font-size:14px; text-decoration:none; white-space:nowrap; flex-shrink:0; align-self:center;">Cari Tiket</a>
+</div>
+
+<!-- 4 Stat Cards -->
+<div style="display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px;">
+    <div class="panel" style="padding:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="font-size:11px; font-weight:700; color:#9ca3af; letter-spacing:0.06em; text-transform:uppercase;">Tiket Aktif</div>
+            <span style="font-size:22px;">🎟️</span>
+        </div>
+        <div style="font-size:36px; font-weight:800; color:#1a2035; margin:10px 0 4px;">{{ active_tickets }}</div>
+        <div style="font-size:13px; color:#9ca3af;">Siap digunakan</div>
+    </div>
+    <div class="panel" style="padding:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="font-size:11px; font-weight:700; color:#9ca3af; letter-spacing:0.06em; text-transform:uppercase;">Acara Diikuti</div>
+            <span style="font-size:22px;">🗓️</span>
+        </div>
+        <div style="font-size:36px; font-weight:800; color:#1a2035; margin:10px 0 4px;">{{ events_attended }}</div>
+        <div style="font-size:13px; color:#9ca3af;">Total pengalaman</div>
+    </div>
+    <div class="panel" style="padding:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="font-size:11px; font-weight:700; color:#9ca3af; letter-spacing:0.06em; text-transform:uppercase;">Kode Promo</div>
+            <span style="font-size:22px;">📈</span>
+        </div>
+        <div style="font-size:36px; font-weight:800; color:#1a2035; margin:10px 0 4px;">{{ active_promos }}</div>
+        <div style="font-size:13px; color:#9ca3af;">Tersedia untuk Anda</div>
+    </div>
+    <div class="panel" style="padding:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="font-size:11px; font-weight:700; color:#9ca3af; letter-spacing:0.06em; text-transform:uppercase;">Total Belanja</div>
+            <span style="font-size:22px;">🎵</span>
+        </div>
+        <div style="font-size:26px; font-weight:800; color:#1a2035; margin:10px 0 4px;">{{ total_belanja }}</div>
+        <div style="font-size:13px; color:#9ca3af;">Bulan ini</div>
+    </div>
+</div>
+
+<!-- Tiket Mendatang -->
+<div class="panel">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+        <div>
+            <h2 style="margin:0 0 4px; font-size:16px;">Tiket Mendatang</h2>
+            <p style="margin:0; font-size:13px;">Tiket pertunjukan yang akan datang</p>
+        </div>
+        <a href="{% url 'ticket_list' %}" style="color:#2563eb; font-size:14px; font-weight:700;">Lihat Semua</a>
+    </div>
+    <div style="margin-top:16px; display:grid; gap:2px;">
+        {% for t in upcoming_tickets %}
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 0; border-bottom:1px solid #f1f5f9;">
+                <div>
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                        <span style="font-weight:700; font-size:15px;">{{ t.event_title }}</span>
+                        <span style="background:#e0f2fe; color:#0369a1; font-size:11px; font-weight:700; padding:2px 8px; border-radius:99px; text-transform:uppercase;">{{ t.category_name }}</span>
+                    </div>
+                    <div style="font-size:13px; color:#9ca3af; display:flex; gap:12px;">
+                        <span>🗓️ {{ t.event_datetime|date:"d M Y" }}</span>
+                        <span>📍 {{ t.venue_name }}, {{ t.city }}</span>
+                    </div>
+                </div>
+                <span style="color:#d1d5db; font-size:18px;">›</span>
+            </div>
+        {% empty %}
+            <p style="color:#9ca3af; text-align:center; padding:20px 0;">Belum ada tiket mendatang.</p>
+        {% endfor %}
+    </div>
+</div>
+
+{% endif %}
+
+<!-- Profile Quick Actions -->
+<div style="margin-top:20px; display:flex; gap:10px; justify-content:flex-end;">
+    <a class="button secondary" href="{% url 'profile_edit' %}">Edit Profil</a>
+    <a class="button secondary" href="{% url 'password_update' %}">Update Password</a>
+</div>
 {% endblock %}

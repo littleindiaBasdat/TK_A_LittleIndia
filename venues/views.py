@@ -12,8 +12,9 @@ def can_manage(user):
 def venue_list_view(request):
     query = request.GET.get('q', '').strip()
     city_filter = request.GET.get('city', '').strip()
+    seating_filter = request.GET.get('seating', '').strip()
 
-    sql = "SELECT * FROM venue WHERE 1=1"
+    sql = "SELECT venue_id, venue_name, address, city, capacity, has_reserved_seating FROM venue WHERE 1=1"
     params = []
 
     if query:
@@ -23,6 +24,11 @@ def venue_list_view(request):
     if city_filter:
         sql += " AND city = %s"
         params.append(city_filter)
+
+    if seating_filter == 'reserved':
+        sql += " AND has_reserved_seating = TRUE"
+    elif seating_filter == 'free':
+        sql += " AND has_reserved_seating = FALSE"
 
     sql += " ORDER BY venue_name"
 
@@ -40,6 +46,7 @@ def venue_list_view(request):
         'cities': cities,
         'query': query,
         'city_filter': city_filter,
+        'seating_filter': seating_filter,
         'can_manage': can_manage(request.user),
     })
 
@@ -55,8 +62,9 @@ def venue_create_view(request):
         address = request.POST.get('address', '').strip()
         city = request.POST.get('city', '').strip()
         capacity_raw = request.POST.get('capacity', '')
+        has_reserved_seating = request.POST.get('has_reserved_seating') == 'on'
 
-        error = validate_basic_fields(venue_name, address, city, capacity_raw)
+        error = _validate_fields(venue_name, address, city, capacity_raw)
         if error:
             messages.error(request, error)
             return render(request, 'venues/venue_form.html', {
@@ -64,19 +72,17 @@ def venue_create_view(request):
                 'venue': {
                     'venue_name': venue_name, 'address': address,
                     'city': city, 'capacity': capacity_raw,
+                    'has_reserved_seating': has_reserved_seating,
                 },
             })
 
         venue_id = str(uuid.uuid4())
-        # TODO: Justin (Trigger 2.1) - validasi duplikasi nama venue di kota yang sama
-        # (case-insensitive) akan di-handle oleh trigger BEFORE INSERT ON venue.
-        # Pesan error trigger akan ditangkap oleh try/except di bawah ini.
         try:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """INSERT INTO venue (venue_id, venue_name, address, city, capacity)
-                       VALUES (%s, %s, %s, %s, %s)""",
-                    [venue_id, venue_name, address, city, int(capacity_raw)]
+                    """INSERT INTO venue (venue_id, venue_name, address, city, capacity, has_reserved_seating)
+                       VALUES (%s, %s, %s, %s, %s, %s)""",
+                    [venue_id, venue_name, address, city, int(capacity_raw), has_reserved_seating]
                 )
         except Exception as exc:
             messages.error(request, str(exc))
@@ -85,6 +91,7 @@ def venue_create_view(request):
                 'venue': {
                     'venue_name': venue_name, 'address': address,
                     'city': city, 'capacity': capacity_raw,
+                    'has_reserved_seating': has_reserved_seating,
                 },
             })
 
@@ -101,7 +108,10 @@ def venue_update_view(request, pk):
         return redirect('venue_list')
 
     with connection.cursor() as cursor:
-        cursor.execute("SELECT * FROM venue WHERE venue_id = %s", [pk])
+        cursor.execute(
+            "SELECT venue_id, venue_name, address, city, capacity, has_reserved_seating FROM venue WHERE venue_id = %s",
+            [pk]
+        )
         cols = [col[0] for col in cursor.description]
         row = cursor.fetchone()
         if not row:
@@ -114,20 +124,20 @@ def venue_update_view(request, pk):
         address = request.POST.get('address', '').strip()
         city = request.POST.get('city', '').strip()
         capacity_raw = request.POST.get('capacity', '')
+        has_reserved_seating = request.POST.get('has_reserved_seating') == 'on'
 
-        error = validate_basic_fields(venue_name, address, city, capacity_raw)
+        error = _validate_fields(venue_name, address, city, capacity_raw)
         if error:
             messages.error(request, error)
             return render(request, 'venues/venue_form.html', {'venue': venue, 'action': 'update'})
 
-        # TODO: Justin (Trigger 2.1) - validasi duplikasi nama venue di kota yang sama
-        # (case-insensitive) akan di-handle oleh trigger BEFORE UPDATE ON venue.
         try:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """UPDATE venue SET venue_name = %s, address = %s, city = %s, capacity = %s
+                    """UPDATE venue SET venue_name = %s, address = %s, city = %s,
+                              capacity = %s, has_reserved_seating = %s
                        WHERE venue_id = %s""",
-                    [venue_name, address, city, int(capacity_raw), pk]
+                    [venue_name, address, city, int(capacity_raw), has_reserved_seating, pk]
                 )
         except Exception as exc:
             messages.error(request, str(exc))
@@ -146,7 +156,10 @@ def venue_delete_view(request, pk):
         return redirect('venue_list')
 
     with connection.cursor() as cursor:
-        cursor.execute("SELECT * FROM venue WHERE venue_id = %s", [pk])
+        cursor.execute(
+            "SELECT venue_id, venue_name, address, city, capacity, has_reserved_seating FROM venue WHERE venue_id = %s",
+            [pk]
+        )
         cols = [col[0] for col in cursor.description]
         row = cursor.fetchone()
         if not row:
@@ -155,8 +168,6 @@ def venue_delete_view(request, pk):
         venue = dict(zip(cols, row))
 
     if request.method == 'POST':
-        # TODO: Justin (Trigger 2.2) - cegah penghapusan venue jika masih memiliki
-        # event aktif akan di-handle oleh trigger BEFORE DELETE ON venue.
         try:
             with connection.cursor() as cursor:
                 cursor.execute("DELETE FROM venue WHERE venue_id = %s", [pk])
@@ -170,11 +181,12 @@ def venue_delete_view(request, pk):
     return render(request, 'venues/venue_confirm_delete.html', {'venue': venue})
 
 
-def validate_basic_fields(venue_name, address, city, capacity_raw):
+def _validate_fields(venue_name, address, city, capacity_raw):
     if not all([venue_name, address, city, capacity_raw]):
         return 'Semua field wajib diisi.'
     try:
-        int(capacity_raw)
+        if int(capacity_raw) <= 0:
+            return 'Kapasitas harus lebih dari 0.'
     except ValueError:
         return 'Kapasitas harus berupa angka.'
     return None

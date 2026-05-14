@@ -74,10 +74,12 @@ def seat_list_view(request):
         cols = [col[0] for col in cursor.description]
         venues = [dict(zip(cols, row)) for row in cursor.fetchall()]
 
-    # Calculate statistics
-    total = len(seats)
+    # Calculate statistics (overall, not filtered)
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT COUNT(*) FROM seat")
+        total = cursor.fetchone()[0]
     filled = len(filled_ids)
-    available = total - filled
+    available = max(total - filled, 0)
 
     return render(request, 'seats/seat_list.html', {
         'seats': seats,

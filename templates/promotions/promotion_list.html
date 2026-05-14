@@ -1,22 +1,27 @@
 {% extends "base.html" %}
 {% block title %}Promosi | TikTakTuk{% endblock %}
 {% block content %}
+
 <section class="page-head">
     <div>
         <h1>Promosi</h1>
         <p>Daftar promosi aktif dan historis di TikTakTuk.</p>
     </div>
     {% if can_admin %}
-        <a class="button primary" href="{% url 'promotion_create' %}">Buat Promo</a>
+        <button class="button primary" type="button" onclick="document.getElementById('modal-create').showModal()">+ Buat Promo</button>
     {% endif %}
 </section>
-<section class="stats">
-    <div class="stat"><span>Total Promo</span><strong>{{ total_promos }}</strong></div>
-    <div class="stat"><span>Total Penggunaan</span><strong>{{ total_usage }}</strong></div>
-    <div class="stat"><span>Tipe Persentase</span><strong>{{ percent_count }}</strong></div>
-</section>
-<form class="filters" method="get">
-    <input name="q" value="{{ query }}" placeholder="Cari kode promo">
+
+<!-- Stat Cards -->
+<div class="stats" style="grid-template-columns:repeat(3,1fr); margin-bottom:24px;">
+    <div class="stat"><span>TOTAL PROMO</span><strong>{{ total_promos }}</strong></div>
+    <div class="stat"><span>TOTAL PENGGUNAAN</span><strong>{{ total_usage }}</strong></div>
+    <div class="stat"><span>TIPE PERSENTASE</span><strong>{{ percent_count }}</strong></div>
+</div>
+
+<!-- Search + Filter -->
+<form class="filters" style="grid-template-columns:1fr minmax(160px,max-content) minmax(100px,max-content);" method="get">
+    <input name="q" value="{{ query }}" placeholder="Cari kode promo...">
     <select name="type">
         <option value="">Semua Tipe</option>
         <option value="PERCENTAGE" {% if discount_filter == "PERCENTAGE" %}selected{% endif %}>Persentase</option>
@@ -24,41 +29,209 @@
     </select>
     <button class="primary" type="submit">Filter</button>
 </form>
-<table>
-    <thead>
-        <tr>
-            <th>Kode Promo</th>
-            <th>Tipe Diskon</th>
-            <th>Nilai Diskon</th>
-            <th>Tanggal Mulai</th>
-            <th>Tanggal Berakhir</th>
-            <th>Penggunaan</th>
-            {% if can_admin %}<th>Action</th>{% endif %}
-        </tr>
-    </thead>
-    <tbody>
-        {% for promotion in promotions %}
+
+<!-- Promotion Table -->
+<div style="overflow-x:auto;">
+    <table>
+        <thead>
             <tr>
-                <td>{{ promotion.promo_code }}</td>
-                <td>{% if promotion.discount_type == "PERCENTAGE" %}Persentase{% else %}Nominal{% endif %}</td>
-                <td>{% if promotion.discount_type == "PERCENTAGE" %}{{ promotion.discount_value }}%{% else %}Rp{{ promotion.discount_value }}{% endif %}</td>
-                <td>{{ promotion.start_date }}</td>
-                <td>{{ promotion.end_date }}</td>
-                <td>{{ promotion.usage_count }} / {{ promotion.usage_limit }}</td>
+                <th>Kode Promo</th>
+                <th>Tipe Diskon</th>
+                <th>Nilai Diskon</th>
+                <th>Tanggal Mulai</th>
+                <th>Tanggal Berakhir</th>
+                <th>Penggunaan</th>
+                {% if can_admin %}<th style="width:160px;">Action</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in promotions %}
+            <tr>
+                <td>
+                    <span style="font-weight:700; font-family:monospace; background:#f1f5f9; padding:3px 8px; border-radius:6px; font-size:13px;">{{ p.promo_code }}</span>
+                </td>
+                <td>
+                    {% if p.discount_type == "PERCENTAGE" %}
+                        <span class="chip" style="background:#eff6ff; color:#1d4ed8; font-size:12px; min-height:24px; padding:0 10px;">Persentase</span>
+                    {% else %}
+                        <span class="chip" style="background:#f0fdf4; color:#166534; font-size:12px; min-height:24px; padding:0 10px;">Nominal</span>
+                    {% endif %}
+                </td>
+                <td style="font-weight:700; color:#0f766e;">
+                    {% if p.discount_type == "PERCENTAGE" %}{{ p.discount_value }}%{% else %}Rp {{ p.discount_value|floatformat:0 }}{% endif %}
+                </td>
+                <td style="font-size:13px; color:#6b7280;">{{ p.start_date|date:"d M Y" }}</td>
+                <td style="font-size:13px; color:#6b7280;">{{ p.end_date|date:"d M Y" }}</td>
+                <td>
+                    <span style="font-size:13px;">{{ p.usage_count }} / {{ p.usage_limit }}</span>
+                    <div style="margin-top:4px; height:4px; background:#e5e7eb; border-radius:2px; width:80px;">
+                        <div style="height:4px; border-radius:2px; background:#0f766e; width:{% widthratio p.usage_count p.usage_limit 80 %}px;"></div>
+                    </div>
+                </td>
                 {% if can_admin %}
-                    <td>
-                        <div class="actions">
-                            <a class="button secondary" href="{% url 'promotion_update' promotion.promotion_id %}">Update</a>
-                            <a class="button danger" href="{% url 'promotion_delete' promotion.promotion_id %}">Delete</a>
-                        </div>
-                    </td>
+                <td>
+                    <div class="actions">
+                        <button class="button secondary" type="button"
+                                style="font-size:12px; min-height:32px; padding:0 12px;"
+                                data-id="{{ p.promotion_id }}"
+                                data-code="{{ p.promo_code }}"
+                                data-type="{{ p.discount_type }}"
+                                data-value="{{ p.discount_value }}"
+                                data-start="{{ p.start_date|date:'Y-m-d' }}"
+                                data-end="{{ p.end_date|date:'Y-m-d' }}"
+                                data-limit="{{ p.usage_limit }}"
+                                onclick="openUpdateModal(this)">Update</button>
+                        <button class="danger" type="button"
+                                style="font-size:12px; min-height:32px; padding:0 12px;"
+                                data-id="{{ p.promotion_id }}"
+                                data-code="{{ p.promo_code }}"
+                                onclick="openDeleteModal(this)">Delete</button>
+                    </div>
+                </td>
                 {% endif %}
             </tr>
-        {% empty %}
+            {% empty %}
             <tr>
-                <td colspan="{% if can_admin %}7{% else %}6{% endif %}">Belum ada promosi yang sesuai.</td>
+                <td colspan="{% if can_admin %}7{% else %}6{% endif %}" style="text-align:center; color:#9ca3af; padding:32px;">
+                    Belum ada promosi yang sesuai dengan pencarian.
+                </td>
             </tr>
-        {% endfor %}
-    </tbody>
-</table>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if can_admin %}
+<!-- ============ CREATE MODAL ============ -->
+<dialog id="modal-create" style="border:none; border-radius:12px; padding:0; width:min(480px,90vw); box-shadow:0 20px 60px rgba(0,0,0,.2);">
+    <div style="padding:28px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+            <h2 style="margin:0; font-size:18px;">Buat Promo Baru</h2>
+            <button type="button" onclick="document.getElementById('modal-create').close()"
+                    style="border:none; background:none; font-size:20px; cursor:pointer; color:#9ca3af; padding:0; line-height:1;">×</button>
+        </div>
+        <form class="stack" method="post" action="{% url 'promotion_create' %}">
+            {% csrf_token %}
+            <label>Kode Promo <span style="color:#b42318;">*</span>
+                <input name="promo_code" placeholder="cth. TIKTAK20" style="text-transform:uppercase;" required>
+            </label>
+            <label>Tipe Diskon <span style="color:#b42318;">*</span>
+                <select name="discount_type" required>
+                    <option value="">Pilih tipe...</option>
+                    <option value="PERCENTAGE">Persentase (%)</option>
+                    <option value="NOMINAL">Nominal (Rp)</option>
+                </select>
+            </label>
+            <label>Nilai Diskon <span style="color:#b42318;">*</span>
+                <input type="number" step="0.01" min="0.01" name="discount_value" placeholder="cth. 20 atau 50000" required>
+            </label>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+                <label>Tanggal Mulai <span style="color:#b42318;">*</span>
+                    <input type="date" name="start_date" required>
+                </label>
+                <label>Tanggal Berakhir <span style="color:#b42318;">*</span>
+                    <input type="date" name="end_date" required>
+                </label>
+            </div>
+            <label>Batas Penggunaan <span style="color:#b42318;">*</span>
+                <input type="number" min="1" name="usage_limit" placeholder="cth. 100" required>
+            </label>
+            <div class="actions" style="justify-content:flex-end; margin-top:8px;">
+                <button type="button" class="button secondary" onclick="document.getElementById('modal-create').close()">Batal</button>
+                <button class="primary" type="submit">Buat</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<!-- ============ UPDATE MODAL ============ -->
+<dialog id="modal-update" style="border:none; border-radius:12px; padding:0; width:min(480px,90vw); box-shadow:0 20px 60px rgba(0,0,0,.2);">
+    <div style="padding:28px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+            <h2 style="margin:0; font-size:18px;">Update Promosi</h2>
+            <button type="button" onclick="document.getElementById('modal-update').close()"
+                    style="border:none; background:none; font-size:20px; cursor:pointer; color:#9ca3af; padding:0; line-height:1;">×</button>
+        </div>
+        <form class="stack" method="post" id="update-form" action="">
+            {% csrf_token %}
+            <label>Kode Promo <span style="color:#b42318;">*</span>
+                <input name="promo_code" id="upd-promo_code" style="text-transform:uppercase;" required>
+            </label>
+            <label>Tipe Diskon <span style="color:#b42318;">*</span>
+                <select name="discount_type" id="upd-discount_type" required>
+                    <option value="PERCENTAGE">Persentase (%)</option>
+                    <option value="NOMINAL">Nominal (Rp)</option>
+                </select>
+            </label>
+            <label>Nilai Diskon <span style="color:#b42318;">*</span>
+                <input type="number" step="0.01" min="0.01" name="discount_value" id="upd-discount_value" required>
+            </label>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+                <label>Tanggal Mulai <span style="color:#b42318;">*</span>
+                    <input type="date" name="start_date" id="upd-start_date" required>
+                </label>
+                <label>Tanggal Berakhir <span style="color:#b42318;">*</span>
+                    <input type="date" name="end_date" id="upd-end_date" required>
+                </label>
+            </div>
+            <label>Batas Penggunaan <span style="color:#b42318;">*</span>
+                <input type="number" min="1" name="usage_limit" id="upd-usage_limit" required>
+            </label>
+            <div class="actions" style="justify-content:flex-end; margin-top:8px;">
+                <button type="button" class="button secondary" onclick="document.getElementById('modal-update').close()">Batal</button>
+                <button class="primary" type="submit">Simpan</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<!-- ============ DELETE MODAL ============ -->
+<dialog id="modal-delete" style="border:none; border-radius:12px; padding:0; width:min(440px,90vw); box-shadow:0 20px 60px rgba(0,0,0,.2);">
+    <div style="padding:28px;">
+        <div style="text-align:center; margin-bottom:20px;">
+            <div style="font-size:36px; margin-bottom:10px;">🗑️</div>
+            <h2 style="margin:0 0 6px; color:#b42318;">Hapus Promosi?</h2>
+            <p style="margin:0; font-size:14px;">Tindakan ini tidak dapat dibatalkan.</p>
+        </div>
+        <div style="background:#fff1f2; border:1px solid #fecaca; border-radius:8px; padding:14px; margin-bottom:20px;">
+            <div style="font-size:12px; color:#9ca3af; font-weight:700; text-transform:uppercase; margin-bottom:6px;">Promosi yang akan dihapus</div>
+            <div style="font-weight:700; font-family:monospace; color:#374151; font-size:15px;" id="delete-promo-code"></div>
+        </div>
+        <form method="post" id="delete-form" action="">
+            {% csrf_token %}
+            <div class="actions" style="justify-content:center;">
+                <button type="button" class="button secondary" onclick="document.getElementById('modal-delete').close()">Batal</button>
+                <button class="danger" type="submit">Hapus</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<script>
+function openUpdateModal(btn) {
+    const d = btn.dataset;
+    document.getElementById('update-form').action = `/promotions/${d.id}/edit/`;
+    document.getElementById('upd-promo_code').value = d.code;
+    document.getElementById('upd-discount_type').value = d.type;
+    document.getElementById('upd-discount_value').value = d.value;
+    document.getElementById('upd-start_date').value = d.start;
+    document.getElementById('upd-end_date').value = d.end;
+    document.getElementById('upd-usage_limit').value = d.limit;
+    document.getElementById('modal-update').showModal();
+}
+
+function openDeleteModal(btn) {
+    document.getElementById('delete-promo-code').textContent = btn.dataset.code;
+    document.getElementById('delete-form').action = `/promotions/${btn.dataset.id}/hapus/`;
+    document.getElementById('modal-delete').showModal();
+}
+
+['modal-create','modal-update','modal-delete'].forEach(id => {
+    document.getElementById(id).addEventListener('click', function(e) {
+        if (e.target === this) this.close();
+    });
+});
+</script>
+{% endif %}
+
 {% endblock %}

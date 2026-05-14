@@ -1,35 +1,48 @@
 {% extends "base.html" %}
 {% block title %}{% if action == "create" %}Tambah Tiket{% else %}Update Tiket{% endif %} | TikTakTuk{% endblock %}
 {% block content %}
-<section class="panel">
-    <h1>{% if action == "create" %}Tambah Tiket{% else %}Update Tiket{% endif %}</h1>
+<section class="modal-backdrop">
+    <div class="modal">
+        <div class="modal-header">
+            <h1 class="modal-title">{% if action == "create" %}Tambah Tiket{% else %}Update Tiket{% endif %}</h1>
+            <a class="modal-close" href="{% url 'ticket_list' %}">x</a>
+        </div>
     <form class="stack" method="post">
         {% csrf_token %}
         {% if action == "create" %}
             <label>Order
-                <select name="order" required>
+                <select name="order" id="orderSelect" required>
                     <option value="">Pilih order</option>
                     {% for order in orders %}
-                        <option value="{{ order.order_id }}">{{ order.order_id }} &mdash; {{ order.customer_name|default:"-" }} &mdash; {{ order.event_title }}</option>
+                        <option value="{{ order.order_id }}"
+                                data-event-id="{{ order.event_id|default:'' }}"
+                                data-event-title="{{ order.event_title|default:'-' }}"
+                                data-venue-id="{{ order.venue_id|default:'' }}"
+                                data-has-reserved="{{ order.has_reserved_seating|yesno:'1,0' }}">
+                            {{ order.order_id }} &mdash; {{ order.customer_name|default:"-" }} &mdash; {{ order.event_title|default:"-" }}
+                        </option>
                     {% endfor %}
                 </select>
             </label>
             <label>Kategori Tiket
-                <select name="category" required>
+                <select name="category" id="categorySelect" required>
                     <option value="">Pilih kategori</option>
                     {% for category in categories %}
                         <option value="{{ category.category_id }}"
+                            data-event-id="{{ category.event_id }}"
                             {% if category.tickets_sold >= category.quota %}disabled{% endif %}>
                             {{ category.event_title }} &mdash; {{ category.category_name }} &mdash; Rp{{ category.price }} &mdash; ({{ category.tickets_sold }}/{{ category.quota }}){% if category.tickets_sold >= category.quota %} [PENUH]{% endif %}
                         </option>
                     {% endfor %}
                 </select>
             </label>
-            <label>Kursi (Opsional)
-                <select name="seat">
+            <label id="seatField" style="display:none;">Kursi (Opsional)
+                <select name="seat" id="seatSelect">
                     <option value="">Tanpa Kursi</option>
                     {% for seat in seats %}
-                        <option value="{{ seat.seat_id }}">{{ seat.venue_name }} - {{ seat.section }} Baris {{ seat.row_number }} No. {{ seat.seat_number }}</option>
+                        <option value="{{ seat.seat_id }}" data-venue-id="{{ seat.venue_id }}">
+                            {{ seat.venue_name }} - {{ seat.section }} Baris {{ seat.row_number }} No. {{ seat.seat_number }}
+                        </option>
                     {% endfor %}
                 </select>
             </label>
@@ -37,12 +50,18 @@
                 <span><em>Kode Tiket akan di-generate otomatis oleh sistem.</em></span>
             </div>
         {% else %}
-            <div class="meta">
-                {# FIX: ticket_code (bukan code), field dari dict hasil raw SQL #}
-                <span>Kode Tiket: {{ ticket.ticket_code }}</span>
-                <span>Kategori ID: {{ ticket.category_id }}</span>
-                <span>Order ID: {{ ticket.order_id }}</span>
-            </div>
+            <label>Kode Tiket
+                <input value="{{ ticket.ticket_code }}" readonly>
+            </label>
+            {% if status_options %}
+                <label>Status
+                    <select name="status" required>
+                        {% for status in status_options %}
+                            <option value="{{ status }}" {% if ticket_status_value == status %}selected{% endif %}>{{ status }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+            {% endif %}
             <label>Kursi (Opsional)
                 <select name="seat">
                     <option value="">Tanpa Kursi</option>
@@ -60,5 +79,56 @@
             <a class="button secondary" href="{% url 'ticket_list' %}">Batal</a>
         </div>
     </form>
+    </div>
 </section>
+{% if action == "create" %}
+<script>
+    (function () {
+        var orderSelect = document.getElementById('orderSelect');
+        var categorySelect = document.getElementById('categorySelect');
+        var seatSelect = document.getElementById('seatSelect');
+        var seatField = document.getElementById('seatField');
+
+        function filterCategories(eventId) {
+            var options = categorySelect.querySelectorAll('option');
+            options.forEach(function (opt) {
+                if (!opt.value) return;
+                var optEvent = opt.getAttribute('data-event-id') || '';
+                opt.style.display = (eventId && optEvent === eventId) ? '' : 'none';
+            });
+            categorySelect.value = '';
+        }
+
+        function filterSeats(venueId, hasReserved) {
+            if (!hasReserved) {
+                seatField.style.display = 'none';
+                seatSelect.value = '';
+                return;
+            }
+            seatField.style.display = '';
+            var options = seatSelect.querySelectorAll('option');
+            options.forEach(function (opt) {
+                if (!opt.value) return;
+                var optVenue = opt.getAttribute('data-venue-id') || '';
+                opt.style.display = (venueId && optVenue === venueId) ? '' : 'none';
+            });
+            seatSelect.value = '';
+        }
+
+        function handleOrderChange() {
+            var selected = orderSelect.options[orderSelect.selectedIndex];
+            var eventId = selected ? selected.getAttribute('data-event-id') : '';
+            var venueId = selected ? selected.getAttribute('data-venue-id') : '';
+            var hasReserved = selected ? selected.getAttribute('data-has-reserved') === '1' : false;
+            filterCategories(eventId || '');
+            filterSeats(venueId || '', hasReserved);
+        }
+
+        if (orderSelect) {
+            orderSelect.addEventListener('change', handleOrderChange);
+            handleOrderChange();
+        }
+    })();
+</script>
+{% endif %}
 {% endblock %}

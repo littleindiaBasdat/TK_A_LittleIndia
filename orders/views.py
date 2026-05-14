@@ -1,11 +1,26 @@
 from decimal import Decimal
+import json
 import uuid
 from django.contrib import messages
 from accounts.middleware import raw_sql_login_required
 from django.shortcuts import redirect, render
 from django.utils import timezone
+<<<<<<< HEAD
 from django.db import connection, transaction
 from .models import Order
+=======
+from django.db import connection
+
+
+def _fmt_currency(amount):
+    amount = float(amount)
+    if amount >= 1_000_000:
+        m = amount / 1_000_000
+        return f"Rp {m:.1f}M" if m != int(m) else f"Rp {int(m)}M"
+    elif amount >= 1_000:
+        return f"Rp {int(amount):,}".replace(",", ".")
+    return f"Rp {int(amount)}"
+>>>>>>> ee5ea6c3b3069e2c62cafb1432b879eeac543b82
 
 
 def _pg_error_message(exc):
@@ -138,6 +153,7 @@ def order_list_view(request):
         cursor.execute(stat_sql, stat_params)
         stats = dict(zip([col[0] for col in cursor.description], cursor.fetchone()))
     
+    raw_revenue = stats.get('revenue', Decimal('0'))
     return render(request, 'orders/order_list.html', {
         'orders': orders,
         'query': query,
@@ -145,7 +161,8 @@ def order_list_view(request):
         'total_orders': stats.get('total_orders', 0),
         'paid_count': stats.get('paid_count', 0),
         'pending_count': stats.get('pending_count', 0),
-        'revenue': stats.get('revenue', Decimal('0')),
+        'revenue': _fmt_currency(raw_revenue),
+        'show_revenue': request.user.role in ['admin', 'organizer'],
         'can_create': request.user.role == 'customer',
         'can_admin': request.user.role == 'admin',
     })
@@ -159,31 +176,17 @@ def order_create_view(request):
 
     selected_event_id = request.GET.get('event', '').strip()
     selected_event = None
-
-    # Fetch categories dengan join event untuk display, optional filter by event
-    categories_sql = """
-        SELECT tc.category_id, tc.category_name, tc.quota, tc.price, tc.event_id,
-               e.event_title, e.event_datetime, v.venue_name
-        FROM ticket_category tc
-        JOIN event e ON tc.event_id = e.event_id
-        LEFT JOIN venue v ON e.venue_id = v.venue_id
-    """
-    categories_params = []
-    if selected_event_id:
-        categories_sql += " WHERE tc.event_id = %s"
-        categories_params.append(selected_event_id)
-    categories_sql += " ORDER BY e.event_datetime DESC, tc.category_name"
-
-    with connection.cursor() as cursor:
-        cursor.execute(categories_sql, categories_params)
-        cols = [col[0] for col in cursor.description]
-        categories = [dict(zip(cols, row)) for row in cursor.fetchall()]
+    categories = []
+    seats = []
+    has_reserved_seating = False
+    event_artists = []
 
     if selected_event_id:
         with connection.cursor() as cursor:
             cursor.execute(
                 """SELECT e.event_id, e.event_title, e.event_datetime,
-                          v.venue_name, v.city
+                          v.venue_id, v.venue_name, v.city,
+                          COALESCE(v.has_reserved_seating, FALSE)
                    FROM event e
                    LEFT JOIN venue v ON e.venue_id = v.venue_id
                    WHERE e.event_id = %s""",
@@ -191,88 +194,136 @@ def order_create_view(request):
             )
             row = cursor.fetchone()
             if row:
-                selected_event = dict(zip(['event_id', 'event_title', 'event_datetime',
-                                           'venue_name', 'city'], row))
+                selected_event = dict(zip(
+                    ['event_id', 'event_title', 'event_datetime',
+                     'venue_id', 'venue_name', 'city', 'has_reserved_seating'], row
+                ))
+                has_reserved_seating = bool(selected_event['has_reserved_seating'])
 
-    # Fetch promotions
-    with connection.cursor() as cursor:
-        cursor.execute("SELECT * FROM promotion ORDER BY promo_code")
-        cols = [col[0] for col in cursor.description]
-        promotions = [dict(zip(cols, row)) for row in cursor.fetchall()]
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """SELECT category_id, category_name, price, quota
+                   FROM ticket_category WHERE event_id = %s ORDER BY price DESC""",
+                [selected_event_id]
+            )
+            categories = [dict(zip(['category_id', 'category_name', 'price', 'quota'], r))
+                          for r in cursor.fetchall()]
 
-    # Fetch available seats (belum di-assign ke tiket)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """SELECT a.name FROM event_artist ea
+                   JOIN artist a ON ea.artist_id = a.artist_id
+                   WHERE ea.event_id = %s ORDER BY a.name""",
+                [selected_event_id]
+            )
+            event_artists = [r[0] for r in cursor.fetchall()]
+
+        if has_reserved_seating and selected_event:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """SELECT s.seat_id, s.section, s.row_number, s.seat_number
+                       FROM seat s
+                       WHERE s.venue_id = %s
+                         AND s.seat_id NOT IN (SELECT DISTINCT seat_id FROM has_relationship)
+                       ORDER BY s.section, s.row_number, s.seat_number""",
+                    [selected_event['venue_id']]
+                )
+                seats = [dict(zip(['seat_id', 'section', 'row_number', 'seat_number'], r))
+                         for r in cursor.fetchall()]
+
     with connection.cursor() as cursor:
         cursor.execute(
-            """SELECT s.seat_id, s.section, s.row_number, s.seat_number,
-                      v.venue_name
-               FROM seat s
-               LEFT JOIN venue v ON s.venue_id = v.venue_id
-               WHERE s.seat_id NOT IN (SELECT DISTINCT seat_id FROM has_relationship)
-               ORDER BY v.venue_name, s.section, s.row_number, s.seat_number"""
+            """SELECT promotion_id, promo_code, discount_type, discount_value,
+                      start_date, end_date, usage_limit,
+                      (SELECT COUNT(*) FROM order_promotion op WHERE op.promotion_id = p.promotion_id) AS usage_count
+               FROM promotion p
+               WHERE start_date <= CURRENT_DATE AND end_date >= CURRENT_DATE
+               ORDER BY promo_code"""
         )
         cols = [col[0] for col in cursor.description]
-        seats = [dict(zip(cols, row)) for row in cursor.fetchall()]
-    
+        promotions_raw = [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+    # Serialize promos for client-side validation
+    promotions_json = json.dumps([
+        {
+            'code': p['promo_code'],
+            'type': p['discount_type'],
+            'value': float(p['discount_value']),
+            'limit': p['usage_limit'],
+            'used': int(p['usage_count']),
+        }
+        for p in promotions_raw
+    ])
+
+    def _render_create(extra=None):
+        ctx = {
+            'selected_event': selected_event,
+            'categories': categories,
+            'seats': seats,
+            'promotions_json': promotions_json,
+            'has_reserved_seating': has_reserved_seating,
+            'event_artists': event_artists,
+            'action': 'create',
+        }
+        if extra:
+            ctx.update(extra)
+        return render(request, 'orders/order_form.html', ctx)
+
     if request.method == 'POST':
-        category_id = request.POST.get('category')
-        quantity_raw = request.POST.get('quantity', '1')
+        category_id = request.POST.get('category', '').strip()
+        quantity_raw = request.POST.get('quantity', '1').strip()
         promo_code = request.POST.get('promo_code', '').strip()
         seat_id = request.POST.get('seat') or None
 
-        # Basic field validation only (NOT business rules - those go to triggers)
-        if not category_id or not quantity_raw.isdigit():
-            messages.error(request, 'Kategori tiket dan jumlah tiket wajib diisi dengan benar.')
-            return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
+        if not category_id:
+            messages.error(request, 'Kategori tiket wajib dipilih.')
+            return _render_create()
+        if not quantity_raw.isdigit():
+            messages.error(request, 'Jumlah tiket tidak valid.')
+            return _render_create()
 
         quantity = int(quantity_raw)
         if quantity < 1 or quantity > 10:
             messages.error(request, 'Jumlah tiket harus 1 sampai 10.')
-            return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
+            return _render_create()
 
-        # Fetch category for price calculation
         with connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM ticket_category WHERE category_id = %s", [category_id])
-            cols = [col[0] for col in cursor.description]
-            category_row = cursor.fetchone()
-            if not category_row:
+            cursor.execute("SELECT price FROM ticket_category WHERE category_id = %s", [category_id])
+            cat_row = cursor.fetchone()
+            if not cat_row:
                 messages.error(request, 'Kategori tiket tidak ditemukan.')
-                return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
-            category = dict(zip(cols, category_row))
+                return _render_create()
+            price = cat_row[0]
 
-        # Resolve promo_code -> promotion_id (lookup only, NO usage_limit / date check here).
-        # Validasi usage_limit & event_date dikerjakan oleh trigger No. 4 di PostgreSQL.
-        promotion = None
         promotion_id = None
+        promo_data = None
         if promo_code:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "SELECT * FROM promotion WHERE LOWER(promo_code) = LOWER(%s)",
+                    "SELECT promotion_id, discount_type, discount_value FROM promotion WHERE LOWER(promo_code) = LOWER(%s)",
                     [promo_code]
                 )
-                cols = [col[0] for col in cursor.description]
                 promo_row = cursor.fetchone()
                 if not promo_row:
                     messages.error(request, f'Kode promo "{promo_code}" tidak ditemukan.')
-                    return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
-                promotion = dict(zip(cols, promo_row))
-                promotion_id = promotion['promotion_id']
+                    return _render_create()
+                promotion_id = promo_row[0]
+                promo_data = {'discount_type': promo_row[1], 'discount_value': promo_row[2]}
 
-        subtotal = Decimal(str(category['price'])) * quantity
-        total = apply_discount(subtotal, promotion)
+        subtotal = Decimal(str(price)) * quantity
+        total = apply_discount(subtotal, promo_data)
 
-        # Get customer_id
         with connection.cursor() as cursor:
             cursor.execute("SELECT customer_id FROM customer WHERE user_id = %s", [request.user.id])
-            customer_row = cursor.fetchone()
-            if not customer_row:
+            cust_row = cursor.fetchone()
+            if not cust_row:
                 messages.error(request, 'Data customer tidak ditemukan.')
-                return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
-            customer_id = customer_row[0]
+                return _render_create()
+            customer_id = cust_row[0]
 
-        # Perform the order, tickets, and promotion inserts.
-        # Trigger PostgreSQL akan validate constraint dan RAISE EXCEPTION jika ada masalah.
         order_id = str(uuid.uuid4())
         try:
+<<<<<<< HEAD
             with transaction.atomic():
                 with connection.cursor() as cursor:
                     # 1. Insert ORDER
@@ -314,11 +365,44 @@ def order_create_view(request):
             # transaction.atomic() memastikan ORDER + semua tiket di-rollback jika ada error.
             messages.error(request, _pg_error_message(exc))
             return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
+=======
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """INSERT INTO "ORDER" (order_id, customer_id, total_amount, payment_status, order_date)
+                       VALUES (%s, %s, %s, %s, %s)""",
+                    [order_id, customer_id, total, 'Pending', timezone.now()]
+                )
+                first_ticket_id = None
+                for _ in range(quantity):
+                    ticket_id = str(uuid.uuid4())
+                    ticket_code = f'TKT-{uuid.uuid4().hex[:10].upper()}'
+                    cursor.execute(
+                        """INSERT INTO ticket (ticket_id, ticket_code, category_id, order_id)
+                           VALUES (%s, %s, %s, %s)""",
+                        [ticket_id, ticket_code, category_id, order_id]
+                    )
+                    if first_ticket_id is None:
+                        first_ticket_id = ticket_id
 
-        messages.success(request, f'Order {order_id} berhasil dibuat dengan {quantity} tiket.')
+                if seat_id and first_ticket_id:
+                    cursor.execute(
+                        "INSERT INTO has_relationship (ticket_id, seat_id) VALUES (%s, %s)",
+                        [first_ticket_id, seat_id]
+                    )
+                if promotion_id:
+                    cursor.execute(
+                        "INSERT INTO order_promotion (order_id, promotion_id) VALUES (%s, %s)",
+                        [order_id, promotion_id]
+                    )
+        except Exception as exc:
+            messages.error(request, str(exc))
+            return _render_create()
+>>>>>>> ee5ea6c3b3069e2c62cafb1432b879eeac543b82
+
+        messages.success(request, f'Pesanan berhasil! {quantity} tiket telah dipesan.')
         return redirect('order_list')
-    
-    return render(request, 'orders/order_form.html', {'categories': categories, 'promotions': promotions, 'seats': seats, 'selected_event': selected_event})
+
+    return _render_create()
 
 
 @raw_sql_login_required

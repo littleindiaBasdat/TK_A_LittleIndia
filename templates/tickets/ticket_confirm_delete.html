@@ -1,14 +1,19 @@
 {% extends "base.html" %}
 {% block title %}Delete Tiket | TikTakTuk{% endblock %}
 {% block content %}
-<section class="panel">
-    <h1>Delete Tiket</h1>
-    {# FIX: ticket_code (bukan code) #}
-    <p>Anda yakin ingin menghapus tiket <strong>{{ ticket.ticket_code }}</strong>?</p>
-    <form class="actions" method="post">
-        {% csrf_token %}
-        <button class="danger" type="submit">Hapus</button>
-        <a class="button secondary" href="{% url 'ticket_list' %}">Batal</a>
-    </form>
+<section class="modal-backdrop">
+    <div class="modal">
+        <div class="modal-header">
+            <h1 class="modal-title" style="color: var(--danger);">Hapus Tiket</h1>
+            <a class="modal-close" href="{% url 'ticket_list' %}">x</a>
+        </div>
+        {# FIX: ticket_code (bukan code) #}
+        <p>Apakah Anda yakin ingin menghapus tiket <strong>{{ ticket.ticket_code }}</strong>? Relasi kursi akan dilepaskan. Tindakan ini tidak dapat dibatalkan.</p>
+        <form class="actions" method="post">
+            {% csrf_token %}
+            <a class="button secondary" href="{% url 'ticket_list' %}">Batal</a>
+            <button class="danger" type="submit">Hapus</button>
+        </form>
+    </div>
 </section>
 {% endblock %}

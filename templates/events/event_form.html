@@ -1,53 +1,185 @@
 {% extends "base.html" %}
-{% block title %}{% if action == "create" %}Buat Acara{% else %}Edit Acara{% endif %} | TikTakTuk{% endblock %}
+{% block title %}{% if action == "create" %}Buat Acara Baru{% else %}Edit Acara{% endif %} | TikTakTuk{% endblock %}
 {% block content %}
-<section class="panel">
-    <h1>{% if action == "create" %}Buat Acara{% else %}Edit Acara{% endif %}</h1>
-    <form class="stack" method="post">
-        {% csrf_token %}
-        <label>Judul Acara
-            <input name="event_title" value="{{ event.event_title|default:'' }}" required>
-        </label>
-        <label>Tanggal &amp; Waktu Acara
-            <input type="datetime-local" name="event_datetime"
-                   value="{{ event.event_datetime|date:'Y-m-d\TH:i' }}" required>
-        </label>
-        <label>Venue
-            <select name="venue" required>
-                <option value="">Pilih venue</option>
-                {% for v in venues %}
-                    <option value="{{ v.venue_id }}" {% if event.venue_id == v.venue_id %}selected{% endif %}>
-                        {{ v.venue_name }} - {{ v.city }}
-                    </option>
-                {% endfor %}
-            </select>
-        </label>
-        {% if user.role == "admin" %}
-            <label>Organizer
-                <select name="organizer" required>
-                    <option value="">Pilih organizer</option>
-                    {% for o in organizers %}
-                        <option value="{{ o.organizer_id }}" {% if event.organizer_id == o.organizer_id %}selected{% endif %}>
-                            {{ o.organizer_name }}
-                        </option>
-                    {% endfor %}
-                </select>
-            </label>
-        {% endif %}
-        <label>Artist/Performer (boleh lebih dari satu, Ctrl+klik)
-            <select name="artists" multiple size="6">
-                {% for a in artists %}
-                    <option value="{{ a.artist_id }}"
-                        {% if a.artist_id|stringformat:"s" in existing_artist_ids %}selected{% endif %}>
-                        {{ a.name }}
-                    </option>
-                {% endfor %}
-            </select>
-        </label>
-        <div class="actions">
-            <button class="primary" type="submit">{% if action == "create" %}Buat Acara{% else %}Simpan{% endif %}</button>
-            <a class="button secondary" href="{% url 'event_list' %}">Batal</a>
+<div style="max-width:900px; margin:0 auto;">
+    <div style="margin-bottom:20px;">
+        <a href="{% url 'event_list' %}" style="color:#6b7280; font-size:14px;">← Kembali ke Daftar Acara</a>
+    </div>
+
+    <div class="panel">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:24px;">
+            <h2 style="margin:0;">{% if action == "create" %}Buat Acara Baru{% else %}Edit Acara{% endif %}</h2>
         </div>
-    </form>
-</section>
+
+        <form method="post" id="event-form">
+            {% csrf_token %}
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:28px;">
+
+                <!-- =================== LEFT COLUMN =================== -->
+                <div class="stack">
+
+                    <label>JUDUL ACARA (EVENT_TITLE)
+                        <input name="event_title"
+                               value="{{ event.event_title|default:'' }}"
+                               placeholder="cth. Konser Melodi Senja"
+                               required>
+                    </label>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+                        <label>TANGGAL (DATE)
+                            <input type="date" name="event_date"
+                                   value="{{ event.event_datetime|date:'Y-m-d'|default:'' }}"
+                                   required>
+                        </label>
+                        <label>WAKTU (TIME)
+                            <input type="time" name="event_time"
+                                   value="{{ event.event_datetime|date:'H:i'|default:'' }}"
+                                   required>
+                        </label>
+                    </div>
+
+                    <label>VENUE (VENUE_ID)
+                        <select name="venue" required>
+                            <option value="">Pilih venue...</option>
+                            {% for v in venues %}
+                                <option value="{{ v.venue_id }}"
+                                    {% if event.venue_id|stringformat:"s" == v.venue_id|stringformat:"s" %}selected{% endif %}>
+                                    {{ v.venue_name }} — {{ v.city }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </label>
+
+                    {% if user.role == "admin" %}
+                        <label>ORGANIZER
+                            <select name="organizer" required>
+                                <option value="">Pilih organizer...</option>
+                                {% for o in organizers %}
+                                    <option value="{{ o.organizer_id }}"
+                                        {% if event.organizer_id|stringformat:"s" == o.organizer_id|stringformat:"s" %}selected{% endif %}>
+                                        {{ o.organizer_name }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                    {% endif %}
+
+                    <!-- Artist chips (checkbox styled) -->
+                    <div>
+                        <div style="font-size:14px; font-weight:750; color:#667085; margin-bottom:8px;">ARTIS (EVENT_ARTIST)</div>
+                        <div style="display:flex; flex-wrap:wrap; gap:8px; padding:12px; border:1px solid #d9e0ea; border-radius:8px; background:#fff; min-height:50px;">
+                            {% for a in artists %}
+                                <label style="display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border:1px solid #d9e0ea; border-radius:99px; cursor:pointer; font-size:13px; font-weight:600; color:#374151; background:#fff; transition:all .15s;"
+                                       onclick="this.classList.toggle('chip-selected')">
+                                    <input type="checkbox" name="artists" value="{{ a.artist_id }}"
+                                           style="display:none;"
+                                           {% if a.artist_id|stringformat:"s" in existing_artist_ids %}checked{% endif %}
+                                           onchange="this.closest('label').classList.toggle('chip-selected', this.checked)">
+                                    {{ a.name }}
+                                </label>
+                            {% empty %}
+                                <span style="color:#9ca3af; font-size:13px;">Belum ada artis terdaftar.</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- =================== RIGHT COLUMN =================== -->
+                <div class="stack">
+
+                    <!-- Ticket Categories -->
+                    <div>
+                        <div style="font-size:14px; font-weight:750; color:#667085; margin-bottom:8px;">KATEGORI TIKET (TICKET_CATEGORY)</div>
+                        <div id="categories-container" style="display:grid; gap:8px; margin-bottom:10px;">
+                            {% for cat in existing_categories %}
+                                <div class="cat-row" style="display:grid; grid-template-columns:1fr 100px 80px 32px; gap:6px; align-items:center;">
+                                    <input type="hidden" name="cat_id" value="{{ cat.category_id }}">
+                                    <input type="text" name="cat_name"
+                                           value="{{ cat.category_name }}"
+                                           placeholder="Nama kategori"
+                                           style="min-height:38px; font-size:13px;"
+                                           required>
+                                    <input type="number" name="cat_price"
+                                           value="{{ cat.price|floatformat:0 }}"
+                                           placeholder="Harga"
+                                           min="0" step="1000"
+                                           style="min-height:38px; font-size:13px;"
+                                           required>
+                                    <input type="number" name="cat_quota"
+                                           value="{{ cat.quota }}"
+                                           placeholder="Kuota"
+                                           min="1"
+                                           style="min-height:38px; font-size:13px;"
+                                           required>
+                                    <button type="button" onclick="removeCategory(this)"
+                                            style="width:32px; height:38px; border:1px solid #fecaca; border-radius:8px; background:#fff1f2; color:#b42318; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; font-weight:700;">×</button>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        <div style="display:grid; grid-template-columns:1fr 100px 80px 32px; gap:6px; margin-bottom:4px; padding:0 2px;">
+                            <span style="font-size:11px; color:#9ca3af; font-weight:700;">Nama Kategori</span>
+                            <span style="font-size:11px; color:#9ca3af; font-weight:700;">Harga (Rp)</span>
+                            <span style="font-size:11px; color:#9ca3af; font-weight:700;">Kuota</span>
+                            <span></span>
+                        </div>
+                        <button type="button" onclick="addCategory()"
+                                style="display:flex; align-items:center; gap:6px; color:#2563eb; font-size:13px; font-weight:700; background:none; border:none; cursor:pointer; padding:0;">
+                            + Tambah Kategori
+                        </button>
+                    </div>
+
+                    <label>DESKRIPSI
+                        <textarea name="description" placeholder="Deskripsi acara..." style="min-height:130px;">{{ event.description|default:'' }}</textarea>
+                    </label>
+
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="actions" style="justify-content:flex-end; margin-top:28px; padding-top:20px; border-top:1px solid #e5e7eb;">
+                <a class="button secondary" href="{% url 'event_list' %}">Batal</a>
+                <button class="primary" type="submit">
+                    {% if action == "create" %}Buat Acara{% else %}Simpan Perubahan{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    .chip-selected {
+        background: #eff6ff !important;
+        border-color: #2563eb !important;
+        color: #1d4ed8 !important;
+    }
+    /* Pre-check selected artist chips on load */
+</style>
+<script>
+    // Mark already-selected artist chips on page load
+    document.querySelectorAll('input[name="artists"]').forEach(cb => {
+        if (cb.checked) cb.closest('label').classList.add('chip-selected');
+    });
+
+    function addCategory() {
+        const container = document.getElementById('categories-container');
+        const row = document.createElement('div');
+        row.className = 'cat-row';
+        row.style = 'display:grid; grid-template-columns:1fr 100px 80px 32px; gap:6px; align-items:center;';
+        row.innerHTML = `
+            <input type="hidden" name="cat_id" value="">
+            <input type="text" name="cat_name" placeholder="Nama kategori" style="min-height:38px; font-size:13px;" required>
+            <input type="number" name="cat_price" placeholder="Harga" min="0" step="1000" style="min-height:38px; font-size:13px;" required>
+            <input type="number" name="cat_quota" placeholder="Kuota" min="1" style="min-height:38px; font-size:13px;" required>
+            <button type="button" onclick="removeCategory(this)"
+                style="width:32px; height:38px; border:1px solid #fecaca; border-radius:8px; background:#fff1f2; color:#b42318; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; font-weight:700;">×</button>
+        `;
+        container.appendChild(row);
+    }
+
+    function removeCategory(btn) {
+        btn.closest('.cat-row').remove();
+    }
+</script>
 {% endblock %}

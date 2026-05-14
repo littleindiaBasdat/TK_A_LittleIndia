@@ -106,6 +106,94 @@
         .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
         .stack { display: grid; gap: 14px; }
         .filters { display: grid; grid-template-columns: minmax(220px, 1fr) repeat(3, minmax(160px, max-content)); gap: 10px; margin-bottom: 20px; }
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, .55);
+            display: grid;
+            place-items: center;
+            padding: 20px;
+            z-index: 40;
+        }
+        .modal {
+            width: min(560px, 100%);
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            box-shadow: 0 20px 60px rgba(15, 23, 42, .25);
+            padding: 20px 22px;
+            position: relative;
+        }
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .modal-title {
+            margin: 0;
+            font-size: 20px;
+        }
+        .modal-close {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border-radius: 999px;
+            border: 1px solid var(--line);
+            background: #fff;
+            font-weight: 800;
+        }
+        .ticket-list { display: grid; gap: 16px; }
+        .ticket-card {
+            display: grid;
+            grid-template-columns: 1fr 160px;
+            gap: 16px;
+            padding: 18px;
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            box-shadow: 0 12px 28px rgba(20, 32, 55, .08);
+        }
+        .ticket-main { display: grid; gap: 12px; }
+        .ticket-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+        .ticket-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+        .ticket-code { color: var(--muted); font-weight: 700; font-size: 13px; }
+        .ticket-title { margin: 0; font-size: 20px; }
+        .ticket-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 10px 16px;
+            color: var(--ink);
+        }
+        .ticket-grid span { display: block; }
+        .ticket-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; font-weight: 700; margin-bottom: 4px; }
+        .ticket-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .ticket-qr {
+            display: grid;
+            align-content: center;
+            justify-items: center;
+            gap: 8px;
+            border-left: 1px dashed var(--line);
+            padding-left: 12px;
+            color: var(--muted);
+            font-weight: 700;
+            font-size: 12px;
+        }
+        .ticket-qr-box {
+            width: 92px;
+            height: 92px;
+            border-radius: 12px;
+            border: 1px solid var(--line);
+            background: #f8fafc;
+            display: grid;
+            place-items: center;
+            color: var(--ink);
+            font-weight: 800;
+        }
+        .ticket-qr-label { text-transform: uppercase; letter-spacing: .08em; }
         label { display: grid; gap: 7px; color: var(--muted); font-size: 14px; font-weight: 750; }
         input, select, textarea {
             width: 100%;
@@ -129,6 +217,8 @@
             .nav { justify-content: flex-start; }
             .page-head { display: grid; }
             .filters { grid-template-columns: 1fr; }
+            .ticket-card { grid-template-columns: 1fr; }
+            .ticket-qr { border-left: 0; border-top: 1px dashed var(--line); padding-left: 0; padding-top: 12px; }
             table { display: block; overflow-x: auto; }
         }
     </style>
@@ -140,14 +230,15 @@
             {% if user.is_authenticated %}
                 {% if user.role == 'admin' %}
                     <a href="{% url 'dashboard' %}">Dashboard</a>
+                    <a href="{% url 'event_list' %}">Manajemen Event</a>
                     <a href="{% url 'venue_list' %}">Manajemen Venue</a>
                     <a href="{% url 'seat_list' %}">Manajemen Kursi</a>
                     <a href="{% url 'ticket_category_list' %}">Kategori Tiket</a>
                     <a href="{% url 'ticket_list' %}">Manajemen Tiket</a>
                     <a href="{% url 'order_list' %}">Semua Order</a>
-                    <a href="{% url 'artist_list' %}">Artis</a>
+                    <a href="{% url 'artist_list' %}">Manajemen Artis</a>
                     <a href="{% url 'promotion_list' %}">Promosi</a>
-                    <a href="{% url 'dashboard' %}">Profile</a>
+                    <a href="{% url 'profile_edit' %}">Profile</a>
                 {% elif user.role == 'organizer' %}
                     <a href="{% url 'dashboard' %}">Dashboard</a>
                     <a href="{% url 'event_list' %}">Event Saya</a>
@@ -156,10 +247,10 @@
                     <a href="{% url 'ticket_category_list' %}">Kategori Tiket</a>
                     <a href="{% url 'ticket_list' %}">Manajemen Tiket</a>
                     <a href="{% url 'order_list' %}">Semua Order</a>
-                    <a href="{% url 'dashboard' %}">Profile</a>
+                    <a href="{% url 'profile_edit' %}">Profile</a>
                 {% else %}
                     <a href="{% url 'dashboard' %}">Dashboard</a>
-                    <a href="{% url 'ticket_list' %}">Tiket Saya</a>
+                    <a href="{% url 'my_tickets' %}">Tiket Saya</a>
                     <a href="{% url 'order_list' %}">Pesanan</a>
                     <a href="{% url 'event_browse' %}">Cari Event</a>
                     <a href="{% url 'promotion_list' %}">Promosi</a>
