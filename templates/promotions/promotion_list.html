@@ -46,8 +46,8 @@
                 {% if can_admin %}
                     <td>
                         <div class="actions">
-                            <a class="button secondary" href="{% url 'promotion_update' promotion.id %}">Update</a>
-                            <a class="button danger" href="{% url 'promotion_delete' promotion.id %}">Delete</a>
+                            <a class="button secondary" href="{% url 'promotion_update' promotion.promotion_id %}">Update</a>
+                            <a class="button danger" href="{% url 'promotion_delete' promotion.promotion_id %}">Delete</a>
                         </div>
                     </td>
                 {% endif %}

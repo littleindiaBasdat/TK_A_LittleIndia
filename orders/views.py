@@ -195,11 +195,13 @@ def order_create_view(request):
                     today = timezone.localdate()
                     with connection.cursor() as cursor:
                         cursor.execute(
-                            """SELECT * FROM promotion 
-                               WHERE LOWER(promo_code) = LOWER(%s) 
-                               AND start_date <= %s 
-                               AND end_date >= %s 
-                               AND usage_count < usage_limit""",
+                            """SELECT p.*,
+                                      (SELECT COUNT(*) FROM order_promotion op WHERE op.promotion_id = p.promotion_id) AS usage_count
+                               FROM promotion p
+                               WHERE LOWER(p.promo_code) = LOWER(%s)
+                               AND p.start_date <= %s
+                               AND p.end_date >= %s
+                               AND (SELECT COUNT(*) FROM order_promotion op WHERE op.promotion_id = p.promotion_id) < p.usage_limit""",
                             [promo_code, today, today]
                         )
                         cols = [col[0] for col in cursor.description]
@@ -235,14 +237,10 @@ def order_create_view(request):
                     
                     # Link promotion if applied
                     if promotion_id:
+                        op_id = str(uuid.uuid4())
                         cursor.execute(
-                            "INSERT INTO order_promotion (order_id, promotion_id) VALUES (%s, %s)",
-                            [order_id, promotion_id]
-                        )
-                        # Increment promotion usage
-                        cursor.execute(
-                            "UPDATE promotion SET usage_count = usage_count + 1 WHERE promotion_id = %s",
-                            [promotion_id]
+                            "INSERT INTO order_promotion (order_promotion_id, order_id, promotion_id) VALUES (%s, %s, %s)",
+                            [op_id, order_id, promotion_id]
                         )
                 
                 messages.success(request, f'Order {order_id} berhasil dibuat.')

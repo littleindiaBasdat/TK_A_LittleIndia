@@ -1,3 +1,4 @@
+import uuid
 from django.contrib import messages
 from django.shortcuts import redirect, render
 from django.db import connection
@@ -12,7 +13,9 @@ def promotion_list_view(request):
     discount_filter = request.GET.get('type', '').strip()
     
     # Build SQL query
-    sql = "SELECT * FROM promotion WHERE 1=1"
+    sql = """SELECT p.*,
+                    (SELECT COUNT(*) FROM order_promotion op WHERE op.promotion_id = p.promotion_id) AS usage_count
+             FROM promotion p WHERE 1=1"""
     params = []
     
     if query:
@@ -33,18 +36,10 @@ def promotion_list_view(request):
     total_usage = 0
     percent_count = 0
     with connection.cursor() as cursor:
-        try:
-            cursor.execute(
-                "SELECT COALESCE(SUM(usage_count), 0) as total_usage FROM promotion"
-            )
-            total_usage = cursor.fetchone()[0]
-        except:
-            # Column might not exist or different schema
-            total_usage = 0
-        
-        cursor.execute(
-            "SELECT COUNT(*) as percent_count FROM promotion WHERE discount_type = 'percent'"
-        )
+        cursor.execute("SELECT COUNT(*) FROM order_promotion")
+        total_usage = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM promotion WHERE discount_type = 'percent'")
         percent_count = cursor.fetchone()[0]
     
     return render(request, 'promotions/promotion_list.html', {
@@ -85,10 +80,11 @@ def promotion_create_view(request):
             
             # Create promotion
             with connection.cursor() as cursor:
+                promo_id = str(uuid.uuid4())
                 cursor.execute(
-                    """INSERT INTO promotion (promo_code, discount_type, discount_value, start_date, end_date, usage_limit, usage_count)
-                       VALUES (%s, %s, %s, %s, %s, %s, 0)""",
-                    [promo_code, discount_type, discount_value, start_date, end_date, usage_limit]
+                    """INSERT INTO promotion (promotion_id, promo_code, discount_type, discount_value, start_date, end_date, usage_limit)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                    [promo_id, promo_code, discount_type, discount_value, start_date, end_date, usage_limit]
                 )
             messages.success(request, 'Promosi berhasil dibuat.')
             return redirect('promotion_list')

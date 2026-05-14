@@ -24,7 +24,8 @@ def scoped_tickets(user):
         return " AND c.user_id = %s", [user_id]
     elif user_role == 'organizer':
         # scope: tiket dari event yang diorganize
-        return " AND e.organizer_id = %s", [user_id]
+        # NOTE: user.id = user_id; organizer_id harus dilookup dari tabel organizer
+        return " AND e.organizer_id IN (SELECT organizer_id FROM organizer WHERE user_id = %s)", [user_id]
     return "", []
 
 
@@ -34,7 +35,7 @@ def category_scope(user):
     user_role = user.role
 
     if user_role == 'organizer':
-        return " AND e.organizer_id = %s", [user_id]
+        return " AND e.organizer_id IN (SELECT organizer_id FROM organizer WHERE user_id = %s)", [user_id]
     return "", []
 
 
@@ -44,7 +45,7 @@ def event_scope(user):
     user_role = user.role
 
     if user_role == 'organizer':
-        return " AND organizer_id = %s", [user_id]
+        return " AND organizer_id IN (SELECT organizer_id FROM organizer WHERE user_id = %s)", [user_id]
     return "", []
 
 
@@ -167,7 +168,7 @@ def ticket_create_view(request):
     categories_params = []
 
     if request.user.role == 'organizer':
-        categories_sql += " AND e.organizer_id = %s"
+        categories_sql += " AND e.organizer_id IN (SELECT organizer_id FROM organizer WHERE user_id = %s)"
         categories_params.append(str(request.user.id))
     
     categories_sql += " GROUP BY tc.category_id, tc.category_name, tc.quota, tc.price, tc.event_id, e.event_title, v.venue_name, v.venue_id"
@@ -471,7 +472,7 @@ def ticket_category_update_view(request, pk):
     """
     category_params = [pk]
     if request.user.role == 'organizer':
-        category_sql += " AND e.organizer_id = %s"
+        category_sql += " AND e.organizer_id IN (SELECT organizer_id FROM organizer WHERE user_id = %s)"
         category_params.append(str(request.user.id))
 
     with connection.cursor() as cursor:
@@ -548,7 +549,7 @@ def ticket_category_delete_view(request, pk):
     """
     category_params = [pk]
     if request.user.role == 'organizer':
-        category_sql += " AND e.organizer_id = %s"
+        category_sql += " AND e.organizer_id IN (SELECT organizer_id FROM organizer WHERE user_id = %s)"
         category_params.append(str(request.user.id))
 
     with connection.cursor() as cursor:
