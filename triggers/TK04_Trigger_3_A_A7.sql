@@ -53,6 +53,7 @@ RETURNS TABLE (
     category_id     UUID,
     category_name   VARCHAR,
     quota           INTEGER,
+    price           NUMERIC,
     tickets_sold    BIGINT,
     remaining       BIGINT
 ) AS $$
@@ -68,11 +69,12 @@ BEGIN
             tc.category_id,
             tc.category_name,
             tc.quota,
-            COUNT(t.ticket_id)          AS tickets_sold,
+            tc.price,
+            COUNT(t.ticket_id)            AS tickets_sold,
             tc.quota - COUNT(t.ticket_id) AS remaining
         FROM ticket_category tc
         LEFT JOIN ticket t ON t.category_id = tc.category_id
         WHERE tc.event_id = p_event_id
-        GROUP BY tc.category_id, tc.category_name, tc.quota;
+        GROUP BY tc.category_id, tc.category_name, tc.quota, tc.price;
 END;
 $$ LANGUAGE plpgsql;

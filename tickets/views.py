@@ -40,16 +40,12 @@ def get_ticket_status_column():
 
 def scoped_tickets(user):
     """Returns SQL WHERE clause and params for ticket scoping"""
-    # FIX: user.id seharusnya pakai user_id dari session (sesuai middleware)
     user_id = str(user.id)
     user_role = user.role
 
     if user_role == 'customer':
-        # scope: tiket milik customer yang sedang login
         return " AND c.user_id = %s", [user_id]
     elif user_role == 'organizer':
-        # scope: tiket dari event yang diorganize
-        # NOTE: user.id = user_id; organizer_id harus dilookup dari tabel organizer
         return " AND e.organizer_id IN (SELECT organizer_id FROM organizer WHERE user_id = %s)", [user_id]
     return "", []
 
@@ -92,14 +88,6 @@ def ticket_list_view(request):
     status_filter = request.GET.get('status', '').strip()
     status_col = get_ticket_status_column()
 
-    # FIX: kolom di DB:
-    #   ticket       -> ticket_id, ticket_code, category_id, order_id  (TIDAK ada status, seat_id)
-    #   ticket_category -> category_id, category_name, quota, price, event_id
-    #   event        -> event_id, event_title, venue_id, organizer_id
-    #   customer     -> customer_id, full_name, user_id
-    #   "ORDER"      -> order_id, order_date, payment_status, total_amount, customer_id
-    #   has_relationship -> ticket_id, seat_id  (relasi ticket <-> seat)
-    #   seat         -> seat_id, section, row_number, seat_number, venue_id
     select_status = f", t.{status_col} AS ticket_status" if status_col else ""
     sql = f"""
         SELECT
@@ -132,12 +120,10 @@ def ticket_list_view(request):
     """
     params = []
 
-    # Apply user scope
     scope_clause, scope_params = scoped_tickets(request.user)
     sql += scope_clause
     params.extend(scope_params)
 
-    # Query filter
     if query:
         sql += " AND (LOWER(t.ticket_code) LIKE LOWER(%s) OR LOWER(e.event_title) LIKE LOWER(%s))"
         params.extend([f"%{query}%", f"%{query}%"])
@@ -146,7 +132,6 @@ def ticket_list_view(request):
         sql += f" AND t.{status_col} = %s"
         params.append(status_filter)
 
-    # Fetch tickets
     with connection.cursor() as cursor:
         cursor.execute(sql, params)
         cols = [col[0] for col in cursor.description]
@@ -194,8 +179,6 @@ def ticket_create_view(request):
         messages.error(request, 'Anda tidak memiliki izin untuk membuat tiket.')
         return redirect('ticket_list')
 
-    # Get orders with event info via ticket_category
-    # NOTE: order yang belum punya tiket -> event_title NULL. Itu OK, ditampilkan "-"
     orders_sql = """
         SELECT o.order_id, o.order_date, o.payment_status, o.total_amount,
                c.full_name AS customer_name,
@@ -249,34 +232,45 @@ def ticket_create_view(request):
         venue_id = order.get('venue_id')
         order['has_reserved_seating'] = bool(seat_counts.get(str(venue_id), 0))
 
-    # Get categories with quota usage info
-    # TODO: Ammar (Trigger 3.2) - bisa diganti pakai stored function sisa kuota
-    # berdasarkan event_id (lihat spec No. 3.2). Kalau fungsi sudah ready,
-    # gunakan: SELECT * FROM get_remaining_quota_by_event(<event_id>);
-    categories_sql = """
-        SELECT tc.category_id, tc.category_name, tc.quota, tc.price,
-               tc.event_id, e.event_title, v.venue_name, v.venue_id,
-               COUNT(t.ticket_id) AS tickets_sold
-        FROM ticket_category tc
-        LEFT JOIN event e ON tc.event_id = e.event_id
-        LEFT JOIN venue v ON e.venue_id = v.venue_id
-        LEFT JOIN ticket t ON tc.category_id = t.category_id
-        WHERE 1=1
-    """
-    categories_params = []
-
+    events_for_quota_sql = "SELECT DISTINCT tc.event_id FROM ticket_category tc WHERE 1=1"
+    events_for_quota_params = []
     if request.user.role == 'organizer':
-        categories_sql += " AND e.organizer_id IN (SELECT organizer_id FROM organizer WHERE user_id = %s)"
-        categories_params.append(str(request.user.id))
-    
-    categories_sql += " GROUP BY tc.category_id, tc.category_name, tc.quota, tc.price, tc.event_id, e.event_title, v.venue_name, v.venue_id"
+        events_for_quota_sql += (
+            " AND tc.event_id IN ("
+            "  SELECT e.event_id FROM event e"
+            "  WHERE e.organizer_id IN (SELECT organizer_id FROM organizer WHERE user_id = %s)"
+            ")"
+        )
+        events_for_quota_params.append(str(request.user.id))
 
     with connection.cursor() as cursor:
-        cursor.execute(categories_sql, categories_params)
-        cols = [col[0] for col in cursor.description]
-        categories = [dict(zip(cols, row)) for row in cursor.fetchall()]
+        cursor.execute(events_for_quota_sql, events_for_quota_params)
+        event_ids = [row[0] for row in cursor.fetchall()]
 
-    # Get available seats (not assigned to any ticket), include venue for filtering
+    categories = []
+    with connection.cursor() as cursor:
+        for eid in event_ids:
+            cursor.execute(
+                "SELECT * FROM get_remaining_quota_by_event(%s)", [str(eid)]
+            )
+            cols = [col[0] for col in cursor.description]
+            rows = [dict(zip(cols, row)) for row in cursor.fetchall()]
+
+            cursor.execute(
+                """SELECT e.event_title, v.venue_name, v.venue_id::text
+                   FROM event e
+                   LEFT JOIN venue v ON e.venue_id = v.venue_id
+                   WHERE e.event_id = %s""",
+                [str(eid)]
+            )
+            event_info = cursor.fetchone()
+            for row in rows:
+                row['event_id'] = str(eid)
+                row['event_title'] = event_info[0] if event_info else '-'
+                row['venue_name'] = event_info[1] if event_info else '-'
+                row['venue_id'] = event_info[2] if event_info else None
+            categories.extend(rows)
+   
     seats_sql = """
         SELECT s.seat_id, s.section, s.row_number, s.seat_number, s.venue_id, v.venue_name
         FROM seat s
@@ -298,10 +292,6 @@ def ticket_create_view(request):
         if not all([order_id, category_id]):
             messages.error(request, 'Order dan kategori tiket wajib dipilih.')
         else:
-            # TODO: Abid (Trigger 5.2) - validasi kuota kategori tiket (tickets_sold >= quota)
-            # akan di-handle oleh trigger BEFORE INSERT ON ticket. Pesan error trigger
-            # akan ditangkap oleh try/except di bawah ini.
-            # FK existence checks — dilakukan di luar transaksi agar UX cepat.
             with connection.cursor() as cursor:
                 cursor.execute('SELECT order_id FROM "ORDER" WHERE order_id = %s', [order_id])
                 if not cursor.fetchone():
@@ -325,12 +315,8 @@ def ticket_create_view(request):
                             'orders': orders, 'categories': categories, 'seats': seats, 'action': 'create',
                         })
 
-            # INSERT ticket + has_relationship dalam satu transaksi atomik.
-            # Trigger 5.2 fires pada INSERT ticket — exception rolls back has_relationship juga.
             try:
                 with connection.cursor() as cursor:
-                    # Basic FK existence check (cepat di Python untuk UX yang ramah).
-                    # Constraint sebenarnya tetap di-enforce oleh DB.
                     cursor.execute('SELECT order_id FROM "ORDER" WHERE order_id = %s', [order_id])
                     if not cursor.fetchone():
                         messages.error(request, 'Order tidak ditemukan.')
@@ -403,7 +389,6 @@ def ticket_create_view(request):
                                 'orders': orders, 'categories': categories, 'seats': seats, 'action': 'create',
                             })
 
-                    # INSERT ticket - Trigger 5.2 (Abid) akan fire di sini untuk validasi kuota
                     ticket_id = str(uuid.uuid4())
                     code = f'TKT-{uuid.uuid4().hex[:10].upper()}'
                     cursor.execute(
@@ -414,16 +399,9 @@ def ticket_create_view(request):
 
                     if seat_id:
                         cursor.execute(
-                            """INSERT INTO ticket (ticket_id, ticket_code, category_id, order_id)
-                               VALUES (%s, %s, %s, %s)""",
-                            [ticket_id, code, category_id, order_id]
+                            "INSERT INTO has_relationship (ticket_id, seat_id) VALUES (%s, %s)",
+                            [ticket_id, seat_id]
                         )
-
-                        if seat_id:
-                            cursor.execute(
-                                "INSERT INTO has_relationship (ticket_id, seat_id) VALUES (%s, %s)",
-                                [ticket_id, seat_id]
-                            )
             except Exception as exc:
                 messages.error(request, _pg_error_message(exc))
                 return render(request, 'tickets/ticket_form.html', {
@@ -449,7 +427,6 @@ def ticket_update_view(request, pk):
 
     status_col = get_ticket_status_column()
 
-    # FIX: fetch ticket + seat via has_relationship
     with connection.cursor() as cursor:
         cursor.execute(
             """SELECT t.*,
@@ -468,7 +445,6 @@ def ticket_update_view(request, pk):
             return redirect('ticket_list')
         ticket = dict(zip(cols, ticket_row))
 
-    # Fetch available seats (belum dipasang ke tiket lain, atau seat milik tiket ini)
     current_seat_id = ticket.get('seat_id')
     seats_sql = """
         SELECT s.*, v.venue_name AS venue_name
@@ -507,7 +483,6 @@ def ticket_update_view(request, pk):
                     f"UPDATE ticket SET {status_col} = %s WHERE ticket_id = %s",
                     [status_value, pk]
                 )
-            # Update has_relationship
             cursor.execute("DELETE FROM has_relationship WHERE ticket_id = %s", [pk])
             if seat_id:
                 cursor.execute(
@@ -545,8 +520,6 @@ def ticket_delete_view(request, pk):
 
     if request.method == 'POST':
         with connection.cursor() as cursor:
-            # has_relationship akan ter-cascade delete jika ada ON DELETE CASCADE,
-            # tapi untuk aman hapus manual dulu
             cursor.execute("DELETE FROM has_relationship WHERE ticket_id = %s", [pk])
             cursor.execute("DELETE FROM ticket WHERE ticket_id = %s", [pk])
         messages.success(request, 'Tiket berhasil dihapus.')
@@ -563,7 +536,6 @@ def ticket_category_list_view(request):
     query = request.GET.get('q', '').strip()
     event_filter = request.GET.get('event', '').strip()
 
-    # FIX: kolom category_name (bukan name)
     sql = """
         SELECT tc.*, e.event_title AS event_title, v.venue_name AS venue_name
         FROM ticket_category tc
@@ -578,7 +550,6 @@ def ticket_category_list_view(request):
     params.extend(scope_params)
 
     if query:
-        # FIX: category_name bukan name
         sql += " AND (LOWER(tc.category_name) LIKE LOWER(%s) OR LOWER(e.event_title) LIKE LOWER(%s))"
         params.extend([f"%{query}%", f"%{query}%"])
 
@@ -634,7 +605,6 @@ def ticket_category_create_view(request):
 
     if request.method == 'POST':
         event_id = request.POST.get('event')
-        # FIX: field name di form tetap "name" tapi kolom DB adalah category_name
         category_name = request.POST.get('name', '').strip()
         quota_raw = request.POST.get('quota', '')
         price_raw = request.POST.get('price', '')
@@ -661,7 +631,6 @@ def ticket_category_create_view(request):
                         messages.error(request, 'Total kuota kategori tiket tidak boleh melebihi kapasitas venue.')
                         return render(request, 'tickets/category_form.html', {'events': events, 'action': 'create'})
 
-                # FIX: kolom category_name (bukan name)
                 cursor.execute(
                     "INSERT INTO ticket_category (event_id, category_name, quota, price) VALUES (%s, %s, %s, %s)",
                     [event_id, category_name, quota, price_raw]
@@ -738,7 +707,6 @@ def ticket_category_update_view(request, pk):
                         messages.error(request, 'Total kuota tidak boleh melebihi kapasitas venue.')
                         return render(request, 'tickets/category_form.html', {'events': events, 'category': category, 'action': 'update'})
 
-                # FIX: kolom category_name
                 cursor.execute(
                     "UPDATE ticket_category SET event_id = %s, category_name = %s, quota = %s, price = %s WHERE category_id = %s",
                     [event_id, category_name, quota, price_raw, pk]
@@ -788,7 +756,6 @@ def validate_category_input(event_id, name, quota_raw, price_raw, events):
     if not all([event_id, name, quota_raw, price_raw]):
         return 'Semua field wajib diisi.'
 
-    # FIX: key event pakai event_id (bukan id)
     event_exists = any(str(e.get('event_id')) == str(event_id) for e in events)
     if not event_exists:
         return 'Event tidak valid untuk role Anda.'
