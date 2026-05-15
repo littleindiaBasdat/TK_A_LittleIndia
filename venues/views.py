@@ -9,6 +9,15 @@ def can_manage(user):
     return user.is_authenticated and user.role in ['admin', 'organizer']
 
 
+def _pg_error_message(exc):
+    cause = getattr(exc, '__cause__', None)
+    if cause is not None:
+        diag = getattr(cause, 'diag', None)
+        if diag is not None and diag.message_primary:
+            return diag.message_primary
+    return str(exc).split('\nCONTEXT:')[0].split(' CONTEXT:')[0].strip()
+
+
 def venue_list_view(request):
     query = request.GET.get('q', '').strip()
     city_filter = request.GET.get('city', '').strip()
@@ -85,7 +94,7 @@ def venue_create_view(request):
                     [venue_id, venue_name, address, city, int(capacity_raw), has_reserved_seating]
                 )
         except Exception as exc:
-            messages.error(request, str(exc))
+            messages.error(request, _pg_error_message(exc))
             return render(request, 'venues/venue_form.html', {
                 'action': 'create',
                 'venue': {
@@ -140,7 +149,7 @@ def venue_update_view(request, pk):
                     [venue_name, address, city, int(capacity_raw), has_reserved_seating, pk]
                 )
         except Exception as exc:
-            messages.error(request, str(exc))
+            messages.error(request, _pg_error_message(exc))
             return render(request, 'venues/venue_form.html', {'venue': venue, 'action': 'update'})
 
         messages.success(request, 'Venue berhasil diperbarui.')
@@ -172,7 +181,7 @@ def venue_delete_view(request, pk):
             with connection.cursor() as cursor:
                 cursor.execute("DELETE FROM venue WHERE venue_id = %s", [pk])
         except Exception as exc:
-            messages.error(request, str(exc))
+            messages.error(request, _pg_error_message(exc))
             return redirect('venue_list')
 
         messages.success(request, 'Venue berhasil dihapus.')
