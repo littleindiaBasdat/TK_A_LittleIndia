@@ -1,8 +1,12 @@
 {% extends "base.html" %}
 {% block title %}{% if action == "create" %}Tambah Kursi{% else %}Update Kursi{% endif %} | TikTakTuk{% endblock %}
 {% block content %}
-<section class="panel">
-    <h1>{% if action == "create" %}Tambah Kursi{% else %}Update Kursi{% endif %}</h1>
+<section class="modal-backdrop">
+    <div class="modal">
+        <div class="modal-header">
+            <h1 class="modal-title">{% if action == "create" %}Tambah Kursi{% else %}Update Kursi{% endif %}</h1>
+            <a class="modal-close" href="{% url 'seat_list' %}">x</a>
+        </div>
     <form class="stack" method="post">
         {% csrf_token %}
         <label>Venue
@@ -17,18 +21,21 @@
         <label>Section
             <input name="section" value="{{ seat.section|default:'' }}" required>
         </label>
-        <label>Baris
-            {# FIX: name="row_number" dan key row_number #}
-            <input name="row_number" value="{{ seat.row_number|default:'' }}" required>
-        </label>
-        <label>No. Kursi
-            {# FIX: name="seat_number" dan key seat_number #}
-            <input name="seat_number" value="{{ seat.seat_number|default:'' }}" required>
-        </label>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+            <label>Baris
+                {# FIX: name="row_number" dan key row_number #}
+                <input name="row_number" value="{{ seat.row_number|default:'' }}" required>
+            </label>
+            <label>No. Kursi
+                {# FIX: name="seat_number" dan key seat_number #}
+                <input name="seat_number" value="{{ seat.seat_number|default:'' }}" required>
+            </label>
+        </div>
         <div class="actions">
             <button class="primary" type="submit">{% if action == "create" %}Tambah{% else %}Simpan{% endif %}</button>
             <a class="button secondary" href="{% url 'seat_list' %}">Batal</a>
         </div>
     </form>
+    </div>
 </section>
 {% endblock %}

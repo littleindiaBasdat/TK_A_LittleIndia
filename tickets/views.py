@@ -2,7 +2,17 @@ import uuid
 from django.contrib import messages
 from accounts.middleware import raw_sql_login_required
 from django.shortcuts import redirect, render
-from django.db import connection
+from django.db import connection, transaction
+
+
+def _pg_error_message(exc):
+    """Extract the primary message from a PostgreSQL trigger RAISE EXCEPTION."""
+    cause = getattr(exc, '__cause__', None)
+    if cause is not None:
+        diag = getattr(cause, 'diag', None)
+        if diag is not None and diag.message_primary:
+            return diag.message_primary
+    return str(exc).strip()
 
 
 def can_create(user):
@@ -11,6 +21,21 @@ def can_create(user):
 
 def can_admin(user):
     return user.is_authenticated and user.role == 'admin'
+
+
+def get_ticket_status_column():
+    """Return a safe status column name for ticket table, if exists."""
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'ticket'
+              AND column_name IN ('status', 'ticket_status')
+            """
+        )
+        row = cursor.fetchone()
+    return row[0] if row else None
 
 
 def scoped_tickets(user):
@@ -65,6 +90,7 @@ def can_manage_category(user):
 def ticket_list_view(request):
     query = request.GET.get('q', '').strip()
     status_filter = request.GET.get('status', '').strip()
+    status_col = get_ticket_status_column()
 
     # FIX: kolom di DB:
     #   ticket       -> ticket_id, ticket_code, category_id, order_id  (TIDAK ada status, seat_id)
@@ -74,7 +100,8 @@ def ticket_list_view(request):
     #   "ORDER"      -> order_id, order_date, payment_status, total_amount, customer_id
     #   has_relationship -> ticket_id, seat_id  (relasi ticket <-> seat)
     #   seat         -> seat_id, section, row_number, seat_number, venue_id
-    sql = """
+    select_status = f", t.{status_col} AS ticket_status" if status_col else ""
+    sql = f"""
         SELECT
             t.ticket_id,
             t.ticket_code,
@@ -86,11 +113,13 @@ def ticket_list_view(request):
             tc.price           AS category_price,
             e.event_id,
             e.event_title,
+            e.event_datetime,
             v.venue_name,
             hr.seat_id,
             s.section          AS seat_section,
             s.row_number       AS seat_row,
             s.seat_number      AS seat_number
+            {select_status}
         FROM ticket t
         LEFT JOIN "ORDER" o   ON t.order_id    = o.order_id
         LEFT JOIN customer c  ON o.customer_id = c.customer_id
@@ -113,8 +142,9 @@ def ticket_list_view(request):
         sql += " AND (LOWER(t.ticket_code) LIKE LOWER(%s) OR LOWER(e.event_title) LIKE LOWER(%s))"
         params.extend([f"%{query}%", f"%{query}%"])
 
-    # FIX: ticket tidak punya kolom status — filter status dihapus
-    # (jika nanti ada kolom status di schema, baru bisa diaktifkan)
+    if status_filter and status_col:
+        sql += f" AND t.{status_col} = %s"
+        params.append(status_filter)
 
     # Fetch tickets
     with connection.cursor() as cursor:
@@ -122,11 +152,36 @@ def ticket_list_view(request):
         cols = [col[0] for col in cursor.description]
         tickets = [dict(zip(cols, row)) for row in cursor.fetchall()]
 
+    status_options = []
+    if status_col:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"SELECT DISTINCT t.{status_col} FROM ticket t WHERE t.{status_col} IS NOT NULL ORDER BY 1"
+            )
+            status_options = [row[0] for row in cursor.fetchall()]
+
+    total_count = len(tickets)
+    valid_count = 0
+    used_count = 0
+    for ticket in tickets:
+        status_value = ticket.get('ticket_status') if status_col else None
+        status_text = (str(status_value).strip().lower() if status_value is not None else '')
+        if not status_col:
+            valid_count += 1
+        elif status_text in ['valid', 'aktif', 'active']:
+            valid_count += 1
+        elif status_text in ['terpakai', 'used', 'checkedin', 'redeemed']:
+            used_count += 1
+
     title = 'Tiket Saya' if request.user.role == 'customer' else 'Manajemen Tiket'
     return render(request, 'tickets/ticket_list.html', {
         'tickets': tickets,
         'query': query,
         'status_filter': status_filter,
+        'status_options': status_options,
+        'total_count': total_count,
+        'valid_count': valid_count,
+        'used_count': used_count,
         'title': title,
         'can_create': can_create(request.user),
         'can_admin': can_admin(request.user),
@@ -142,22 +197,57 @@ def ticket_create_view(request):
     # Get orders with event info via ticket_category
     # NOTE: order yang belum punya tiket -> event_title NULL. Itu OK, ditampilkan "-"
     orders_sql = """
-        SELECT DISTINCT o.order_id, o.order_date, o.payment_status, o.total_amount,
+        SELECT o.order_id, o.order_date, o.payment_status, o.total_amount,
                c.full_name AS customer_name,
-               COALESCE(e.event_title, '-') AS event_title
+               MIN(tc.event_id::text) AS event_id,
+               MIN(e.event_title) AS event_title,
+               MIN(e.venue_id::text) AS venue_id
         FROM "ORDER" o
         LEFT JOIN customer c ON o.customer_id = c.customer_id
         LEFT JOIN ticket t ON o.order_id = t.order_id
         LEFT JOIN ticket_category tc ON t.category_id = tc.category_id
         LEFT JOIN event e ON tc.event_id = e.event_id
-        ORDER BY o.order_date DESC
+        LEFT JOIN venue v ON e.venue_id = v.venue_id
+        WHERE 1=1
     """
     orders_params = []
+
+    if request.user.role == 'organizer':
+        orders_sql += """ AND o.order_id IN (
+            SELECT DISTINCT t.order_id FROM ticket t
+            JOIN ticket_category tc ON t.category_id = tc.category_id
+            WHERE tc.event_id IN (
+                SELECT e.event_id FROM event e
+                WHERE e.organizer_id IN (SELECT organizer_id FROM organizer WHERE user_id = %s)
+            )
+        )"""
+        orders_params.append(str(request.user.id))
+
+    orders_sql += """ GROUP BY o.order_id, o.order_date, o.payment_status, o.total_amount, c.full_name
+        ORDER BY o.order_date DESC
+    """
 
     with connection.cursor() as cursor:
         cursor.execute(orders_sql, orders_params)
         cols = [col[0] for col in cursor.description]
         orders = [dict(zip(cols, row)) for row in cursor.fetchall()]
+
+    venue_ids = [o.get('venue_id') for o in orders if o.get('venue_id')]
+    seat_counts = {}
+    if venue_ids:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """SELECT venue_id::text, COUNT(*)
+                   FROM seat
+                   WHERE venue_id::text = ANY(%s)
+                   GROUP BY venue_id::text""",
+                [venue_ids]
+            )
+            seat_counts = {row[0]: row[1] for row in cursor.fetchall()}
+
+    for order in orders:
+        venue_id = order.get('venue_id')
+        order['has_reserved_seating'] = bool(seat_counts.get(str(venue_id), 0))
 
     # Get categories with quota usage info
     # TODO: Ammar (Trigger 3.2) - bisa diganti pakai stored function sisa kuota
@@ -186,9 +276,9 @@ def ticket_create_view(request):
         cols = [col[0] for col in cursor.description]
         categories = [dict(zip(cols, row)) for row in cursor.fetchall()]
 
-    # Get available seats (not assigned to any ticket)
+    # Get available seats (not assigned to any ticket), include venue for filtering
     seats_sql = """
-        SELECT s.*, v.venue_name AS venue_name
+        SELECT s.seat_id, s.section, s.row_number, s.seat_number, s.venue_id, v.venue_name
         FROM seat s
         LEFT JOIN venue v ON s.venue_id = v.venue_id
         WHERE s.seat_id NOT IN (SELECT DISTINCT seat_id FROM has_relationship)
@@ -211,6 +301,32 @@ def ticket_create_view(request):
             # TODO: Abid (Trigger 5.2) - validasi kuota kategori tiket (tickets_sold >= quota)
             # akan di-handle oleh trigger BEFORE INSERT ON ticket. Pesan error trigger
             # akan ditangkap oleh try/except di bawah ini.
+            # FK existence checks — dilakukan di luar transaksi agar UX cepat.
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT order_id FROM "ORDER" WHERE order_id = %s', [order_id])
+                if not cursor.fetchone():
+                    messages.error(request, 'Order tidak ditemukan.')
+                    return render(request, 'tickets/ticket_form.html', {
+                        'orders': orders, 'categories': categories, 'seats': seats, 'action': 'create',
+                    })
+
+                cursor.execute("SELECT category_id FROM ticket_category WHERE category_id = %s", [category_id])
+                if not cursor.fetchone():
+                    messages.error(request, 'Kategori tiket tidak valid.')
+                    return render(request, 'tickets/ticket_form.html', {
+                        'orders': orders, 'categories': categories, 'seats': seats, 'action': 'create',
+                    })
+
+                if seat_id:
+                    cursor.execute("SELECT seat_id FROM seat WHERE seat_id = %s", [seat_id])
+                    if not cursor.fetchone():
+                        messages.error(request, 'Seat tidak valid.')
+                        return render(request, 'tickets/ticket_form.html', {
+                            'orders': orders, 'categories': categories, 'seats': seats, 'action': 'create',
+                        })
+
+            # INSERT ticket + has_relationship dalam satu transaksi atomik.
+            # Trigger 5.2 fires pada INSERT ticket — exception rolls back has_relationship juga.
             try:
                 with connection.cursor() as cursor:
                     # Basic FK existence check (cepat di Python untuk UX yang ramah).
@@ -222,17 +338,67 @@ def ticket_create_view(request):
                             'orders': orders, 'categories': categories, 'seats': seats, 'action': 'create',
                         })
 
-                    cursor.execute("SELECT category_id FROM ticket_category WHERE category_id = %s", [category_id])
-                    if not cursor.fetchone():
+                    cursor.execute(
+                        "SELECT category_id, event_id FROM ticket_category WHERE category_id = %s",
+                        [category_id]
+                    )
+                    cat_row = cursor.fetchone()
+                    if not cat_row:
                         messages.error(request, 'Kategori tiket tidak valid.')
+                        return render(request, 'tickets/ticket_form.html', {
+                            'orders': orders, 'categories': categories, 'seats': seats, 'action': 'create',
+                        })
+                    category_event_id = str(cat_row[1]) if cat_row[1] else None
+
+                    cursor.execute(
+                        """SELECT MIN(tc.event_id::text) AS event_id, MIN(e.venue_id::text) AS venue_id
+                           FROM ticket t
+                           LEFT JOIN ticket_category tc ON t.category_id = tc.category_id
+                           LEFT JOIN event e ON tc.event_id = e.event_id
+                           LEFT JOIN venue v ON e.venue_id = v.venue_id
+                           WHERE t.order_id = %s""",
+                        [order_id]
+                    )
+                    order_event_row = cursor.fetchone()
+                    order_event_id = str(order_event_row[0]) if order_event_row and order_event_row[0] else None
+                    order_venue_id = str(order_event_row[1]) if order_event_row and order_event_row[1] else None
+                    order_has_seats = False
+                    if order_venue_id:
+                        cursor.execute(
+                            "SELECT 1 FROM seat WHERE venue_id = %s LIMIT 1",
+                            [order_venue_id]
+                        )
+                        order_has_seats = cursor.fetchone() is not None
+
+                    if order_event_id and category_event_id and order_event_id != category_event_id:
+                        messages.error(request, 'Kategori tiket tidak sesuai dengan event pada order.')
+                        return render(request, 'tickets/ticket_form.html', {
+                            'orders': orders, 'categories': categories, 'seats': seats, 'action': 'create',
+                        })
+
+                    if seat_id and not order_has_seats:
+                        messages.error(request, 'Event ini tidak menggunakan reserved seating.')
                         return render(request, 'tickets/ticket_form.html', {
                             'orders': orders, 'categories': categories, 'seats': seats, 'action': 'create',
                         })
 
                     if seat_id:
-                        cursor.execute("SELECT seat_id FROM seat WHERE seat_id = %s", [seat_id])
+                        cursor.execute(
+                            "SELECT seat_id FROM seat WHERE seat_id = %s AND (%s IS NULL OR venue_id = %s)",
+                            [seat_id, order_venue_id, order_venue_id]
+                        )
                         if not cursor.fetchone():
                             messages.error(request, 'Seat tidak valid.')
+                            return render(request, 'tickets/ticket_form.html', {
+                                'orders': orders, 'categories': categories, 'seats': seats, 'action': 'create',
+                            })
+
+                        cursor.execute(
+                            "SELECT 1 FROM has_relationship WHERE seat_id = %s",
+                            [seat_id]
+                        )
+                        if cursor.fetchone():
+                            messages.error(request, 'Seat sudah terpakai.')
                             return render(request, 'tickets/ticket_form.html', {
                                 'orders': orders, 'categories': categories, 'seats': seats, 'action': 'create',
                             })
@@ -248,11 +414,18 @@ def ticket_create_view(request):
 
                     if seat_id:
                         cursor.execute(
-                            "INSERT INTO has_relationship (ticket_id, seat_id) VALUES (%s, %s)",
-                            [ticket_id, seat_id]
+                            """INSERT INTO ticket (ticket_id, ticket_code, category_id, order_id)
+                               VALUES (%s, %s, %s, %s)""",
+                            [ticket_id, code, category_id, order_id]
                         )
+
+                        if seat_id:
+                            cursor.execute(
+                                "INSERT INTO has_relationship (ticket_id, seat_id) VALUES (%s, %s)",
+                                [ticket_id, seat_id]
+                            )
             except Exception as exc:
-                messages.error(request, str(exc))
+                messages.error(request, _pg_error_message(exc))
                 return render(request, 'tickets/ticket_form.html', {
                     'orders': orders, 'categories': categories, 'seats': seats, 'action': 'create',
                 })
@@ -273,6 +446,8 @@ def ticket_update_view(request, pk):
     if not can_admin(request.user):
         messages.error(request, 'Hanya admin yang dapat mengubah tiket.')
         return redirect('ticket_list')
+
+    status_col = get_ticket_status_column()
 
     # FIX: fetch ticket + seat via has_relationship
     with connection.cursor() as cursor:
@@ -308,10 +483,30 @@ def ticket_update_view(request, pk):
         cols = [col[0] for col in cursor.description]
         seats = [dict(zip(cols, row)) for row in cursor.fetchall()]
 
+    status_options = []
+    ticket_status_value = None
+    if status_col:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"SELECT DISTINCT t.{status_col} FROM ticket t WHERE t.{status_col} IS NOT NULL ORDER BY 1"
+            )
+            status_options = [row[0] for row in cursor.fetchall()]
+        ticket_status_value = ticket.get(status_col)
+        if ticket_status_value and ticket_status_value not in status_options:
+            status_options.append(ticket_status_value)
+        if not status_options:
+            status_options = ['Valid', 'Tidak Valid']
+
     if request.method == 'POST':
         seat_id = request.POST.get('seat') or None
+        status_value = request.POST.get('status') if status_col else None
 
         with connection.cursor() as cursor:
+            if status_col and status_value is not None:
+                cursor.execute(
+                    f"UPDATE ticket SET {status_col} = %s WHERE ticket_id = %s",
+                    [status_value, pk]
+                )
             # Update has_relationship
             cursor.execute("DELETE FROM has_relationship WHERE ticket_id = %s", [pk])
             if seat_id:
@@ -326,6 +521,9 @@ def ticket_update_view(request, pk):
     return render(request, 'tickets/ticket_form.html', {
         'ticket': ticket,
         'seats': seats,
+        'status_options': status_options,
+        'status_col': status_col,
+        'ticket_status_value': ticket_status_value,
         'action': 'update',
     })
 

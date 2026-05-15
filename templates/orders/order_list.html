@@ -1,23 +1,39 @@
 {% extends "base.html" %}
-{% block title %}Order | TikTakTuk{% endblock %}
+{% block title %}{% if user.role == "customer" %}Pesanan Saya{% elif user.role == "organizer" %}Daftar Order{% else %}Semua Order{% endif %} | TikTakTuk{% endblock %}
 {% block content %}
+
 <section class="page-head">
     <div>
-        <h1>{% if user.role == "customer" %}Pesanan{% else %}Daftar Order{% endif %}</h1>
-        <p>Daftar order sesuai cakupan role pengguna.</p>
+        <h1>{% if user.role == "customer" %}Pesanan Saya{% elif user.role == "organizer" %}Daftar Order{% else %}Semua Order{% endif %}</h1>
+        <p>{% if user.role == "customer" %}Riwayat pembelian tiket Anda.{% elif user.role == "organizer" %}Order dari event yang Anda selenggarakan.{% else %}Seluruh order yang terdaftar di sistem.{% endif %}</p>
     </div>
-    {% if can_create %}
-        <a class="button primary" href="{% url 'order_create' %}">Buat Order</a>
+</section>
+
+<!-- Stat Cards -->
+<div class="stats" style="grid-template-columns:{% if show_revenue %}repeat(4,1fr){% else %}repeat(3,1fr){% endif %}; margin-bottom:24px;">
+    <div class="stat">
+        <span>TOTAL ORDER</span>
+        <strong>{{ total_orders }}</strong>
+    </div>
+    <div class="stat">
+        <span>LUNAS</span>
+        <strong style="color:#166534;">{{ paid_count }}</strong>
+    </div>
+    <div class="stat">
+        <span>PENDING</span>
+        <strong style="color:#92400e;">{{ pending_count }}</strong>
+    </div>
+    {% if show_revenue %}
+    <div class="stat">
+        <span>TOTAL REVENUE</span>
+        <strong style="color:#0f766e; font-size:22px;">{{ revenue }}</strong>
+    </div>
     {% endif %}
-</section>
-<section class="stats">
-    <div class="stat"><span>Total Order</span><strong>{{ total_orders }}</strong></div>
-    <div class="stat"><span>Lunas</span><strong>{{ paid_count }}</strong></div>
-    <div class="stat"><span>Pending</span><strong>{{ pending_count }}</strong></div>
-    <div class="stat"><span>Total Revenue</span><strong>Rp{{ revenue }}</strong></div>
-</section>
-<form class="filters" method="get">
-    <input name="q" value="{{ query }}" placeholder="Cari Order ID, event, atau customer">
+</div>
+
+<!-- Search + Filter -->
+<form class="filters" style="grid-template-columns:1fr minmax(160px,max-content) minmax(100px,max-content);" method="get">
+    <input name="q" value="{{ query }}" placeholder="{% if user.role == 'admin' %}Cari Order ID atau pelanggan...{% else %}Cari Order ID...{% endif %}">
     <select name="status">
         <option value="">Semua Status</option>
         <option value="Lunas" {% if status_filter == "Lunas" %}selected{% endif %}>Lunas</option>
@@ -26,41 +42,111 @@
     </select>
     <button class="primary" type="submit">Filter</button>
 </form>
-<table>
-    <thead>
-        <tr>
-            <th>Order ID</th>
-            <th>Tanggal</th>
-            <th>Customer</th>
-            <th>Event</th>
-            <th>Status</th>
-            <th>Total</th>
-            {% if can_admin %}<th>Action</th>{% endif %}
-        </tr>
-    </thead>
-    <tbody>
-        {% for order in orders %}
+
+<!-- Order Table -->
+<div style="overflow-x:auto;">
+    <table>
+        <thead>
             <tr>
-                <td>{{ order.order_id }}</td>
-                <td>{{ order.order_date|date:"d M Y H:i" }}</td>
-                <td>{{ order.customer_name }}</td>
-                <td>{{ order.event_name }}</td>
-                <td><span class="chip {% if order.payment_status == 'Dibatalkan' %}red{% elif order.payment_status == 'Lunas' %}blue{% endif %}">{{ order.payment_status }}</span></td>
-                <td>Rp{{ order.total_amount }}</td>
-                {% if can_admin %}
-                    <td>
-                        <div class="actions">
-                            <a class="button secondary" href="{% url 'order_update' order.order_id %}">Update</a>
-                            <a class="button danger" href="{% url 'order_delete' order.order_id %}">Delete</a>
+                <th>ORDER ID</th>
+                {% if user.role != "customer" %}<th>PELANGGAN</th>{% endif %}
+                <th>TANGGAL</th>
+                <th>STATUS</th>
+                <th style="text-align:right;">TOTAL</th>
+                {% if can_admin %}<th style="width:160px;">ACTION</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for order in orders %}
+            <tr>
+                <td style="font-size:12px; font-family:monospace; color:#6b7280; max-width:160px;">
+                    {{ order.order_id|slice:":8" }}…
+                </td>
+                {% if user.role != "customer" %}
+                <td>
+                    {% if order.customer_name %}
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <div style="width:28px; height:28px; border-radius:50%; background:#eff6ff; color:#2563eb; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; flex-shrink:0;">
+                            {{ order.customer_name|slice:":1" }}
                         </div>
-                    </td>
+                        <span style="font-weight:600; font-size:13px;">{{ order.customer_name }}</span>
+                    </div>
+                    {% else %}<span style="color:#d1d5db;">—</span>{% endif %}
+                </td>
+                {% endif %}
+                <td style="font-size:13px; color:#6b7280; white-space:nowrap;">
+                    {{ order.order_date|date:"d M Y" }}<br>
+                    <span style="font-size:12px;">{{ order.order_date|date:"H:i" }}</span>
+                </td>
+                <td>
+                    {% if order.payment_status == "Lunas" %}
+                        <span style="background:#dcfce7; color:#166534; font-size:12px; font-weight:700; padding:3px 10px; border-radius:99px; white-space:nowrap;">● LUNAS</span>
+                    {% elif order.payment_status == "Pending" %}
+                        <span style="background:#fef9c3; color:#92400e; font-size:12px; font-weight:700; padding:3px 10px; border-radius:99px; white-space:nowrap;">● PENDING</span>
+                    {% else %}
+                        <span style="background:#fff1f2; color:#b42318; font-size:12px; font-weight:700; padding:3px 10px; border-radius:99px; white-space:nowrap;">● DIBATALKAN</span>
+                    {% endif %}
+                </td>
+                <td style="text-align:right; font-weight:700; color:#0f766e; white-space:nowrap;">
+                    Rp {{ order.total_amount|floatformat:0 }}
+                </td>
+                {% if can_admin %}
+                <td>
+                    <div class="actions">
+                        <a class="button secondary" style="font-size:12px; min-height:32px; padding:0 12px;"
+                           href="{% url 'order_update' order.order_id %}">Update</a>
+                        <button class="danger" type="button"
+                                style="font-size:12px; min-height:32px; padding:0 12px;"
+                                onclick="openDeleteModal('{{ order.order_id }}')">Delete</button>
+                    </div>
+                </td>
                 {% endif %}
             </tr>
-        {% empty %}
+            {% empty %}
             <tr>
-                <td colspan="{% if can_admin %}7{% else %}6{% endif %}">Belum ada order yang sesuai.</td>
+                <td colspan="{% if can_admin %}{% if user.role != 'customer' %}6{% else %}5{% endif %}{% else %}{% if user.role != 'customer' %}4{% else %}3{% endif %}{% endif %}"
+                    style="text-align:center; color:#9ca3af; padding:32px;">
+                    Belum ada order yang sesuai dengan pencarian.
+                </td>
             </tr>
-        {% endfor %}
-    </tbody>
-</table>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if can_admin %}
+<!-- Delete Confirmation Modal -->
+<dialog id="modal-delete" style="border:none; border-radius:12px; padding:0; width:min(440px,90vw); box-shadow:0 20px 60px rgba(0,0,0,.2);">
+    <div style="padding:28px;">
+        <div style="text-align:center; margin-bottom:20px;">
+            <div style="font-size:36px; margin-bottom:10px;">🗑️</div>
+            <h2 style="margin:0 0 6px; color:#b42318;">Hapus Order?</h2>
+            <p style="margin:0; font-size:14px;">Tindakan ini tidak dapat dibatalkan.</p>
+        </div>
+        <div style="background:#fff1f2; border:1px solid #fecaca; border-radius:8px; padding:14px; margin-bottom:20px;">
+            <div style="font-size:12px; color:#9ca3af; font-weight:700; text-transform:uppercase; margin-bottom:6px;">Order yang akan dihapus</div>
+            <div style="font-weight:700; font-family:monospace; color:#374151; font-size:13px;" id="delete-order-display"></div>
+        </div>
+        <form method="post" id="delete-form" action="">
+            {% csrf_token %}
+            <div class="actions" style="justify-content:center;">
+                <button type="button" class="button secondary" onclick="document.getElementById('modal-delete').close()">Batal</button>
+                <button class="danger" type="submit">Hapus</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<script>
+function openDeleteModal(orderId) {
+    document.getElementById('delete-order-display').textContent = orderId.substring(0, 8) + '…';
+    document.getElementById('delete-form').action = `/orders/${orderId}/hapus/`;
+    document.getElementById('modal-delete').showModal();
+}
+document.getElementById('modal-delete').addEventListener('click', function(e) {
+    if (e.target === this) this.close();
+});
+</script>
+{% endif %}
+
 {% endblock %}
