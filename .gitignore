@@ -1,5 +1,38 @@
-node_modules/
-.env
+# Django
 *.pyc
 __pycache__/
+*.sqlite3
 db.sqlite3
+db.sqlite3-journal
+
+# Environment
+.env
+.env.local
+*.env
+
+# Static files (akan di-collect saat deploy)
+staticfiles/
+/static/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+*.egg-info/
+dist/
+build/
+venv/
+env/
+.venv/
+
+# Logs
+*.log
+
+# Migrations cache (jangan ignore migrations file itu sendiri)
+# */migrations/__pycache__/
